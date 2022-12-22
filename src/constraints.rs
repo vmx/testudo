@@ -7,7 +7,9 @@ use crate::{
   sparse_mlpoly::{SparsePolyEntry, SparsePolynomial},
   unipoly::UniPoly,
 };
+
 use ark_bls12_377::{constraints::PairingVar as IV, Bls12_377 as I, Fr};
+
 use ark_crypto_primitives::{
   snark::BooleanInputVar, CircuitSpecificSetupSNARK, SNARKGadget, SNARK,
 };
@@ -18,10 +20,7 @@ use ark_groth16::{
   Groth16, PreparedVerifyingKey, Proof as GrothProof,
 };
 
-use ark_poly_commit::multilinear_pc::{
-  data_structures::{Commitment, Proof, VerifierKey},
-  MultilinearPC,
-};
+use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof, VerifierKey};
 use ark_r1cs_std::{
   alloc::{AllocVar, AllocationMode},
   fields::fp::FpVar,
@@ -409,6 +408,7 @@ impl ConstraintSynthesizer<Fr> for R1CSVerificationCircuit {
 
 #[derive(Clone)]
 pub struct VerifierConfig {
+  pub comm: Commitment<I>,
   pub num_vars: usize,
   pub num_cons: usize,
   pub input: Vec<Fr>,
