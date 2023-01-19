@@ -4,7 +4,7 @@ use crate::group::{Fq, Fr};
 use crate::math::Math;
 use crate::parameters::poseidon_params;
 use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
-use crate::sqrt_pst::PolyList;
+use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
 use ark_bls12_377::Bls12_377 as I;
 use ark_bw6_761::BW6_761 as P;
@@ -12,6 +12,7 @@ use ark_ec::PairingEngine;
 use ark_poly::MultilinearExtension;
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
 use ark_poly_commit::multilinear_pc::MultilinearPC;
+use snarkpack::mipp::MippProof;
 
 use super::commitments::MultiCommitGens;
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyCommitmentGens};
@@ -45,6 +46,7 @@ pub struct R1CSProof {
   // The transcript state after the satisfiability proof was computed.
   pub transcript_sat_state: Scalar,
   pub t: <I as PairingEngine>::Fqk,
+  pub mipp_proof: MippProof<I>,
 }
 #[derive(Clone)]
 pub struct R1CSSumcheckGens {
@@ -146,12 +148,12 @@ impl R1CSProof {
 
     // create the multilinear witness polynomial from the satisfying assiment
     // expressed as the list of sqrt-sized polynomials
-    let pl = PolyList::new(&vars.clone());
+    let mut pl = Polynomial::from_evaluations(&vars.clone());
 
     let timer_commit = Timer::new("polycommit");
 
     // commitment list to the satisfying witness polynomial list
-    let (comm_list, t) = PolyList::commit(&pl, &gens.gens_pc.ck);
+    let (comm_list, t) = pl.commit(&gens.gens_pc.ck);
 
     let mut bytes = Vec::new();
     t.serialize(&mut bytes).unwrap();
@@ -237,30 +239,27 @@ impl R1CSProof {
       transcript,
     );
     timer_sc_proof_phase2.stop();
+    let c = transcript.challenge_scalar();
+    transcript.new_from_state(&c);
 
     // TODO: modify the polynomial evaluation in Spartan to be consistent
     // with the evaluation in ark-poly-commit so that reversing is not needed
     // anymore
     let timmer_opening = Timer::new("polyopening");
-    let mut dummy = ry[1..].to_vec().clone();
-    dummy.reverse();
-    let q = pl.get_q(&dummy);
+    timer_prove.stop();
 
-    let (comm, proof_eval_vars_at_ry) = PolyList::open_q(comm_list, &gens.gens_pc.ck, &q, &dummy);
+    let (comm, proof_eval_vars_at_ry, mipp_proof) =
+      pl.open(transcript, comm_list, &gens.gens_pc.ck, &ry[1..], &t);
     println!(
       "proof size (no of quotients): {:?}",
       proof_eval_vars_at_ry.proofs.len()
     );
-    // comm.append_to_poseidon(transcript);
+
     timmer_opening.stop();
 
     let timer_polyeval = Timer::new("polyeval");
-    let eval_vars_at_ry = PolyList::eval_q(q.clone(), &dummy);
+    let eval_vars_at_ry = pl.eval(&ry[1..]);
     timer_polyeval.stop();
-
-    timer_prove.stop();
-
-    let c = transcript.challenge_scalar();
 
     (
       R1CSProof {
@@ -273,7 +272,8 @@ impl R1CSProof {
         rx: rx.clone(),
         ry: ry.clone(),
         transcript_sat_state: c,
-        t: t,
+        t,
+        mipp_proof,
       },
       rx,
       ry,
@@ -333,6 +333,7 @@ impl R1CSProof {
     let dp1 = start.elapsed().as_millis();
     prove_inner.stop();
 
+    // this is universal, we don't measure it
     let start = Instant::now();
     let (pk, vk) = Groth16::<P>::setup(circuit.clone(), &mut rng).unwrap();
     let ds = start.elapsed().as_millis();
@@ -344,24 +345,25 @@ impl R1CSProof {
     prove_outer.stop();
 
     let start = Instant::now();
+    let verifier_time = Timer::new("groth16_verification");
     let is_verified = Groth16::<P>::verify(&vk, &[], &proof).unwrap();
     assert!(is_verified);
+    verifier_time.stop();
 
     let timer_verification = Timer::new("commitverification");
-    let mut dummy = self.ry[1..].to_vec();
-    // TODO: ensure ark-poly-commit and Spartan produce consistent results
-    // when evaluating a polynomial at a given point so this reverse is not
-    // needed.
-    dummy.reverse();
+    transcript.new_from_state(&self.transcript_sat_state);
 
     // Verifies the proof of opening against the result of evaluating the
     // witness polynomial at point ry.
-    let res = PolyList::verify_q(
+    let res = Polynomial::verify(
+      transcript,
       &gens.gens_pc.vk,
       &self.comm,
-      &dummy,
+      &self.ry[1..],
       self.eval_vars_at_ry,
       &self.proof_eval_vars_at_ry,
+      &self.mipp_proof,
+      &self.t,
     );
 
     timer_verification.stop();
@@ -382,7 +384,10 @@ impl R1CSProof {
     transcript: &mut PoseidonTranscript,
     gens: &R1CSGens,
   ) -> Result<usize, ProofVerifyError> {
-    // self.comm.append_to_poseidon(transcript);
+    // serialise and add the IPP commitment to the transcript
+    let mut bytes = Vec::new();
+    self.t.serialize(&mut bytes).unwrap();
+    transcript.append_bytes(&bytes);
 
     let c = transcript.challenge_scalar();
 
