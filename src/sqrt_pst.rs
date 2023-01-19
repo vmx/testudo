@@ -1,16 +1,24 @@
-use ark_bls12_377::{Bls12_377 as I, G1Affine};
+use ark_bls12_377::{Bls12_377 as I, G1Affine, G2Affine};
 use ark_ec::{msm::VariableBaseMSM, PairingEngine, ProjectiveCurve};
-use ark_ff::{One, PrimeField};
+use ark_ff::{BigInteger256, One, PrimeField};
 use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
 };
+use ark_serialize::CanonicalSerialize;
 use rayon::prelude::{
   IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
+use snarkpack::mipp::MippProof;
 
 use super::scalar::Scalar;
-use crate::{dense_mlpoly::DensePolynomial, math::Math, timer::Timer};
+use crate::{
+  dense_mlpoly::DensePolynomial,
+  math::Math,
+  poseidon_transcript::{AppendToPoseidon, PoseidonTranscript},
+  timer::Timer,
+  transcript,
+};
 
 pub struct PolyList {
   m: usize,
@@ -50,11 +58,12 @@ impl PolyList {
     let q_timer = Timer::new("build_q");
     assert!(point.len() == 2 * self.m);
     let a = &point[0..self.m];
+    let b = &point[self.m..2 * self.m];
     let pow_m = 2_usize.pow(self.m as u32);
 
     let chis: Vec<Scalar> = (0..pow_m)
       .into_par_iter()
-      .map(|i| Self::get_chi_i(a, i))
+      .map(|i| Self::get_chi_i(b, i))
       .collect();
 
     let z_q: Vec<Scalar> = (0..pow_m)
@@ -69,10 +78,11 @@ impl PolyList {
   // Given point = (\vec{a}, \vec{b}) used to construct q
   // compute q(b) = p(a,b).
   pub fn eval_q(q: DensePolynomial, point: &[Scalar]) -> Scalar {
+    let a = &point[0..point.len() / 2];
     let b = &point[point.len() / 2..point.len()];
     let prods = (0..q.Z.len())
       .into_par_iter()
-      .map(|j| q.Z[j] * PolyList::get_chi_i(b, j));
+      .map(|j| q.Z[j] * PolyList::get_chi_i(&a, j));
 
     prods.sum()
   }
@@ -108,7 +118,7 @@ impl PolyList {
       )
       .collect();
 
-    // computer the IPP commitment
+    // compute the IPP commitment
     let t = I::product_of_pairings(pairings.iter());
     ipp_timer.stop();
 
@@ -122,7 +132,7 @@ impl PolyList {
     let mut prod = Scalar::one();
     for j in 0..m {
       let b_j = b[j];
-      if i >> j & 1 == 1 {
+      if i >> (m - j - 1) & 1 == 1 {
         prod = prod * b_j;
       } else {
         prod = prod * (Scalar::one() - b_j)
@@ -132,11 +142,13 @@ impl PolyList {
   }
 
   pub fn open_q(
+    transcript: &mut PoseidonTranscript,
     comm_list: Vec<Commitment<I>>,
     ck: &CommitterKey<I>,
     q: &DensePolynomial,
     point: &[Scalar],
-  ) -> (Commitment<I>, Proof<I>) {
+    t: &<I as PairingEngine>::Fqk,
+  ) -> (Commitment<I>, Proof<I>, MippProof<I>) {
     let m = point.len() / 2;
     let a = &point[0..m];
     let b = &point[m..2 * m];
@@ -151,19 +163,14 @@ impl PolyList {
     let timer_msm = Timer::new("msm");
     let chis: Vec<_> = (0..pow_m)
       .into_par_iter()
-      .map(|i| Self::get_chi_i(a, i).into_repr())
+      .map(|i| Self::get_chi_i(b, i))
       .collect();
+    let chis_repr: Vec<BigInteger256> = chis.par_iter().map(|y| y.into_repr()).collect();
     assert!(chis.len() == comm_list.len());
+    let a_vec: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
 
-    let c_u = VariableBaseMSM::multi_scalar_mul(
-      comm_list
-        .par_iter()
-        .map(|c| c.g_product)
-        .collect::<Vec<G1Affine>>()
-        .as_slice(),
-      chis.as_slice(),
-    )
-    .into_affine();
+    let c_u =
+      VariableBaseMSM::multi_scalar_mul(a_vec.as_slice(), chis_repr.as_slice()).into_affine();
 
     let U: Commitment<I> = Commitment {
       nv: q.num_vars,
@@ -174,36 +181,59 @@ impl PolyList {
     let comm = MultilinearPC::<I>::commit(ck, q);
     assert!(c_u == comm.g_product);
 
-    // TODO: MIPP proof that U is the inner product of the opening
-    // vector A to T and the vector y
+    let h_vec = ck.powers_of_h[0].clone();
+    // TODO: MIPP proof that U is the inner product of the vector A
+    //  and the vector y, where A is the opening vector to T
+
+    let timer_mipp_proof = Timer::new("mipp_prove");
+    let mipp_proof =
+      MippProof::<I>::prove::<PoseidonTranscript>(transcript, ck, a_vec, chis, h_vec, &c_u, t)
+        .unwrap();
+    timer_mipp_proof.stop();
 
     // PST proof for opening q at b
-    let timer_proof = Timer::new("open");
-    let pst_proof = MultilinearPC::<I>::open(ck, q, &b);
+    let timer_proof = Timer::new("pst_open");
+    let mut a_rev = a.to_vec().clone();
+    a_rev.reverse();
+    let pst_proof = MultilinearPC::<I>::open(ck, q, &a_rev);
     timer_proof.stop();
 
     timer_open.stop();
 
     // TODO: add MIPP proof as return value
-    (U, pst_proof)
+    (U, pst_proof, mipp_proof)
   }
 
   pub fn verify_q(
+    transcript: &mut PoseidonTranscript,
     vk: &VerifierKey<I>,
     U: &Commitment<I>,
     point: &[Scalar],
     v: Scalar,
     pst_proof: &Proof<I>,
-    // TODO: add MIPP proof as argument
+    mipp_proof: &MippProof<I>,
+    T: &<I as PairingEngine>::Fqk,
   ) -> bool {
-    // TODO: MIPP verification
-
     let len = point.len();
+    let a = &point[0..len / 2];
     let b = &point[len / 2..len];
+    let timer_mipp_verify = Timer::new("mipp_verify");
+    let res_mipp = MippProof::<I>::verify::<PoseidonTranscript>(
+      vk,
+      transcript,
+      mipp_proof,
+      b.to_vec(),
+      &U.g_product,
+      T,
+    );
+    assert!(res_mipp == true);
+    timer_mipp_verify.stop();
 
-    let timer_verify = Timer::new("sqrt_verify");
-    let res = MultilinearPC::<I>::check(vk, U, b, v, pst_proof);
-    timer_verify.stop();
+    let mut a_rev = a.to_vec().clone();
+    a_rev.reverse();
+    let timer_pst_verify = Timer::new("pst_verify");
+    let res = MultilinearPC::<I>::check(vk, U, &a_rev, v, pst_proof);
+    timer_pst_verify.stop();
     res
   }
 }
@@ -211,6 +241,8 @@ impl PolyList {
 #[cfg(test)]
 mod tests {
   use std::clone;
+
+  use crate::parameters::poseidon_params;
 
   use super::*;
   use ark_ff::Zero;
@@ -233,7 +265,7 @@ mod tests {
     let res1 = p.evaluate(&r);
 
     let mut r_new = r.to_vec();
-    r_new.reverse();
+    // r_new.reverse();
     let pl = PolyList::new(&Z.clone());
     let q = pl.get_q(&r_new);
     let res2 = PolyList::eval_q(q.clone(), &r_new);
@@ -244,7 +276,7 @@ mod tests {
   #[test]
   fn check_new_poly_commit() {
     let mut rng = ark_std::test_rng();
-    let num_vars = 26;
+    let num_vars = 4;
     let len = 2_usize.pow(num_vars);
     let Z: Vec<Scalar> = (0..len)
       .into_iter()
@@ -255,8 +287,8 @@ mod tests {
       .map(|_| Scalar::rand(&mut rng))
       .collect();
 
-    let gens = MultilinearPC::<I>::setup(13, &mut rng);
-    let (ck, vk) = MultilinearPC::<I>::trim(&gens, 13);
+    let gens = MultilinearPC::<I>::setup(2, &mut rng);
+    let (ck, vk) = MultilinearPC::<I>::trim(&gens, 2);
 
     let pl = PolyList::new(&Z.clone());
     let q = pl.get_q(&r);
@@ -265,9 +297,24 @@ mod tests {
 
     let (comm_list, t) = PolyList::commit(&pl, &ck);
 
-    let (u, pst_proof) = PolyList::open_q(comm_list, &ck, &q, &r);
+    let params = poseidon_params();
+    let mut prover_transcript = PoseidonTranscript::new(&params);
 
-    let res = PolyList::verify_q(&vk, &u, &r, v, &pst_proof);
+    let (u, pst_proof, mipp_proof) =
+      PolyList::open_q(&mut prover_transcript, comm_list, &ck, &q, &r, &t);
+
+    let mut verifier_transcript = PoseidonTranscript::new(&params);
+
+    let res = PolyList::verify_q(
+      &mut verifier_transcript,
+      &vk,
+      &u,
+      &r,
+      v,
+      &pst_proof,
+      &mipp_proof,
+      &t,
+    );
     assert!(res == true);
   }
 }
