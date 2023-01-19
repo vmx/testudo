@@ -393,7 +393,6 @@ impl ConstraintSynthesizer<Fr> for R1CSVerificationCircuit {
 
     let expected_claim_post_phase2_var = eval_Z_at_ry_var * scalar_var;
     claim_post_phase2_var.enforce_equal(&expected_claim_post_phase2_var)?;
-
     let expected_transcript_state_var = transcript_var.challenge()?;
     let claimed_transcript_state_var =
       FpVar::<Fr>::new_input(cs, || Ok(self.claimed_transcript_sat_state))?;
@@ -401,7 +400,6 @@ impl ConstraintSynthesizer<Fr> for R1CSVerificationCircuit {
     // Ensure that the prover and verifier transcipt views are consistent at
     // the end of the satisfiability proof.
     expected_transcript_state_var.enforce_equal(&claimed_transcript_state_var)?;
-
     Ok(())
   }
 }
