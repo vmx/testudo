@@ -42,6 +42,8 @@ ark-groth16 = { version = "^0.3.0", features = ["r1cs"] }
 ark-bw6-761 = { version = "^0.3.0" }
 ark-poly-commit = { version = "^0.3.0" }
 ark-poly = {version = "^0.3.0"}
+snarkpack = { git = "https://github.com/maramihali/snarkpack", branch = "testudo"}
+
 
 lazy_static = "1.4.0"
 rand = { version = "0.8", features = [ "std", "std_rng" ] }
@@ -91,5 +93,6 @@ std = ["ark-ff/std", "ark-ec/std", "ark-std/std", "ark-relations/std", "ark-seri
 
 [patch.crates-io]
 ark-r1cs-std = { git = "https://github.com/arkworks-rs/r1cs-std/", rev = "a2a5ac491ae005ba2afd03fd21b7d3160d794a83"}
-ark-poly-commit = {git = "https://github.com/maramihali/poly-commit"}
+ark-poly-commit = {git = "https://github.com/maramihali/poly-commit", branch="pst_g2"}
+
 

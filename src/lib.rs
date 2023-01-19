@@ -407,7 +407,7 @@ impl SNARK {
     // side all the previous updates are done on the transcript
     // circuit variable and the transcript outside the circuit will be
     // inconsistent wrt to the prover's.
-    transcript.new_from_state(&r1cs_sat_proof.transcript_sat_state);
+    // transcript.new_from_state(&r1cs_sat_proof.transcript_sat_state);
 
     // We send evaluations of A, B, C at r = (rx, ry) as claims
     // to enable the verifier complete the first sum-check
@@ -480,7 +480,7 @@ impl SNARK {
     // TODO: find a way to retrieve this state from the circuit. Currently
     // the API for generating constraints doesn't support returning values
     // computed inside the circuit.
-    transcript.new_from_state(&self.r1cs_sat_proof.transcript_sat_state);
+    // transcript.new_from_state(&self.r1cs_sat_proof.transcript_sat_state);
 
     let (Ar, Br, Cr) = &self.inst_evals;
     transcript.append_scalar(&Ar);
@@ -598,10 +598,10 @@ impl NIZK {
 
     // We send evaluations of A, B, C at r = (rx, ry) as claims
     // to enable the verifier complete the first sum-check
-    let timer_eval = Timer::new("eval_sparse_polys");
+    // let timer_eval = Timer::new("eval_sparse_polys");
     let (claimed_rx, claimed_ry) = &self.r;
     let inst_evals = inst.inst.evaluate(claimed_rx, claimed_ry);
-    timer_eval.stop();
+    // timer_eval.stop();
 
     let timer_sat_proof = Timer::new("verify_sat_proof");
     assert_eq!(input.assignment.len(), inst.inst.get_num_inputs());
