@@ -23,7 +23,10 @@ mod commitments;
 mod dense_mlpoly;
 mod errors;
 mod group;
+#[macro_use]
+pub(crate) mod macros;
 mod math;
+pub(crate) mod mipp;
 mod nizk;
 mod product_tree;
 mod r1csinstance;

@@ -12,6 +12,8 @@ pub trait ProofTranscript {
   fn challenge_vector(&mut self, label: &'static [u8], len: usize) -> Vec<Scalar>;
 }
 
+
+
 impl ProofTranscript for Transcript {
   fn append_protocol_name(&mut self, protocol_name: &'static [u8]) {
     self.append_message(b"protocol-name", protocol_name);

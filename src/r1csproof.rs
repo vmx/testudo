@@ -12,7 +12,7 @@ use ark_ec::PairingEngine;
 use ark_poly::MultilinearExtension;
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
 use ark_poly_commit::multilinear_pc::MultilinearPC;
-use snarkpack::mipp::MippProof;
+use crate::mipp::MippProof;
 
 use super::commitments::MultiCommitGens;
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyCommitmentGens};

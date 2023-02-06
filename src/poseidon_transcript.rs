@@ -1,6 +1,7 @@
 use crate::group::{CompressedGroup, Fr};
 
 use super::scalar::Scalar;
+use crate::mipp::Transcript;
 use ark_bls12_377::{Bls12_377 as I, G1Affine};
 use ark_ec::PairingEngine;
 use ark_ff::{Field, PrimeField};
@@ -10,7 +11,6 @@ use ark_sponge::{
   poseidon::{PoseidonParameters, PoseidonSponge},
   CryptographicSponge,
 };
-use snarkpack::Transcript;
 
 #[derive(Clone)]
 /// TODO
