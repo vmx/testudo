@@ -360,14 +360,14 @@ pub trait Transcript {
   fn append<S: CanonicalSerialize>(&mut self, label: &'static [u8], point: &S);
   fn challenge_scalar<F: PrimeField>(&mut self, label: &'static [u8]) -> F;
 }
+
 #[cfg(test)]
 mod tests {
-  use ark_bls12_381::{Bls12_381, Fr};
+  use ark_bls12_377::{Bls12_377 as E, Fr};
   use ark_ec::PairingEngine;
   use ark_poly::DenseMultilinearExtension;
   use ark_poly_commit::multilinear_pc::MultilinearPC;
   use ark_std::{test_rng, UniformRand};
-  type E = Bls12_381;
   #[test]
   fn test_setup() {
     let mut rng = test_rng();
