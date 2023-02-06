@@ -11,7 +11,6 @@ use ark_sponge::{
   poseidon::{PoseidonParameters, PoseidonSponge},
   CryptographicSponge,
 };
-
 #[derive(Clone)]
 /// TODO
 pub struct PoseidonTranscript {

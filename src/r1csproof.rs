@@ -4,7 +4,7 @@ use crate::group::{Fq, Fr};
 use crate::math::Math;
 use crate::parameters::poseidon_params;
 use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
-use crate::sqrt_pst::PolyList;
+use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
 use ark_bls12_377::Bls12_377 as I;
 use ark_bw6_761::BW6_761 as P;
@@ -13,7 +13,6 @@ use ark_poly::MultilinearExtension;
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use crate::mipp::MippProof;
-
 use super::commitments::MultiCommitGens;
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyCommitmentGens};
 use super::errors::ProofVerifyError;
@@ -148,12 +147,12 @@ impl R1CSProof {
 
     // create the multilinear witness polynomial from the satisfying assiment
     // expressed as the list of sqrt-sized polynomials
-    let pl = PolyList::new(&vars.clone());
+    let mut pl = Polynomial::from_evaluations(&vars.clone());
 
     let timer_commit = Timer::new("polycommit");
 
     // commitment list to the satisfying witness polynomial list
-    let (comm_list, t) = PolyList::commit(&pl, &gens.gens_pc.ck);
+    let (comm_list, t) = pl.commit(&gens.gens_pc.ck);
 
     let mut bytes = Vec::new();
     t.serialize(&mut bytes).unwrap();
@@ -246,11 +245,10 @@ impl R1CSProof {
     // with the evaluation in ark-poly-commit so that reversing is not needed
     // anymore
     let timmer_opening = Timer::new("polyopening");
-    let q = pl.get_q(&ry[1..]);
     timer_prove.stop();
 
     let (comm, proof_eval_vars_at_ry, mipp_proof) =
-      PolyList::open_q(transcript, comm_list, &gens.gens_pc.ck, &q, &ry[1..], &t);
+      pl.open(transcript, comm_list, &gens.gens_pc.ck, &ry[1..], &t);
     println!(
       "proof size (no of quotients): {:?}",
       proof_eval_vars_at_ry.proofs.len()
@@ -259,7 +257,7 @@ impl R1CSProof {
     timmer_opening.stop();
 
     let timer_polyeval = Timer::new("polyeval");
-    let eval_vars_at_ry = PolyList::eval_q(q.clone(), &ry[1..]);
+    let eval_vars_at_ry = pl.eval(&ry[1..]);
     timer_polyeval.stop();
 
     (
@@ -356,7 +354,7 @@ impl R1CSProof {
 
     // Verifies the proof of opening against the result of evaluating the
     // witness polynomial at point ry.
-    let res = PolyList::verify_q(
+    let res = Polynomial::verify(
       transcript,
       &gens.gens_pc.vk,
       &self.comm,

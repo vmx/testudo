@@ -20,18 +20,24 @@ use crate::{
   transcript,
 };
 
-pub struct PolyList {
+pub struct Polynomial {
   m: usize,
   polys: Vec<DensePolynomial>,
+  q: Option<DensePolynomial>,
+  chis_b: Option<Vec<Scalar>>,
 }
 
-impl PolyList {
+impl Polynomial {
   // Given the evaluations over the boolean hypercube of a polynomial p of size
   // 2*m compute the sqrt-sized polynomials p_i as
   // p_i(Y) = \sum_{j \in \{0,1\}^m} p(j, i) * chi_j(Y)
   // where p(X,Y) = \sum_{i \in \{0,\1}^m} chi_i(X) * p_i(Y)
-  pub fn new(Z: &[Scalar]) -> Self {
+  //
+  // TODO: add case when the length of the list is not an even power of 2
+  pub fn from_evaluations(Z: &[Scalar]) -> Self {
     let pl_timer = Timer::new("poly_list_build");
+    // check the evaluation list is a power of 2
+    debug_assert!(Z.len() & (Z.len() - 1) == 0);
     let m = Z.len().log_2() / 2;
     let pow_m = 2_usize.pow(m as u32);
     let polys: Vec<DensePolynomial> = (0..pow_m)
@@ -44,19 +50,23 @@ impl PolyList {
         DensePolynomial::new(z)
       })
       .collect();
-    assert!(polys.len() == pow_m);
+    debug_assert!(polys.len() == pow_m);
     pl_timer.stop();
-    Self { m, polys }
+    Self {
+      m,
+      polys,
+      q: None,
+      chis_b: None,
+    }
   }
 
   // Given point = (\vec{a}, \vec{b}), compute the polynomial q as
   // q(Y) =
   // \sum_{j \in \{0,1\}^m}(\sum_{i \in \{0,1\}^m} p(j,i) * chi_i(a)) * chi_j(Y)
   // and p(a,b) = q(b) where p is the initial polynomial
-
-  pub fn get_q(&self, point: &[Scalar]) -> DensePolynomial {
+  fn get_q(&mut self, point: &[Scalar]) {
     let q_timer = Timer::new("build_q");
-    assert!(point.len() == 2 * self.m);
+    debug_assert!(point.len() == 2 * self.m);
     let a = &point[0..self.m];
     let b = &point[self.m..2 * self.m];
     let pow_m = 2_usize.pow(self.m as u32);
@@ -72,34 +82,36 @@ impl PolyList {
       .collect();
     q_timer.stop();
 
-    DensePolynomial::new(z_q)
+    self.q = Some(DensePolynomial::new(z_q));
+    self.chis_b = Some(chis);
   }
 
   // Given point = (\vec{a}, \vec{b}) used to construct q
   // compute q(b) = p(a,b).
-  pub fn eval_q(q: DensePolynomial, point: &[Scalar]) -> Scalar {
+  pub fn eval(&mut self, point: &[Scalar]) -> Scalar {
     let a = &point[0..point.len() / 2];
     let b = &point[point.len() / 2..point.len()];
+    if self.q.is_none() {
+      self.get_q(point);
+    }
+    let q = self.q.clone().unwrap();
     let prods = (0..q.Z.len())
       .into_par_iter()
-      .map(|j| q.Z[j] * PolyList::get_chi_i(&a, j));
+      .map(|j| q.Z[j] * Polynomial::get_chi_i(&a, j));
 
     prods.sum()
   }
 
-  pub fn commit(
-    poly_list: &PolyList,
-    ck: &CommitterKey<I>,
-  ) -> (Vec<Commitment<I>>, <I as PairingEngine>::Fqk) {
+  pub fn commit(&self, ck: &CommitterKey<I>) -> (Vec<Commitment<I>>, <I as PairingEngine>::Fqk) {
     let timer_commit = Timer::new("sqrt_commit");
 
     let timer_list = Timer::new("comm_list");
 
     // commit to each of the sqrt sized p_i
-    let comm_list: Vec<Commitment<I>> = poly_list
+    let comm_list: Vec<Commitment<I>> = self
       .polys
       .par_iter()
-      .map(|p| MultilinearPC::<I>::commit(&ck.clone(), p))
+      .map(|p| MultilinearPC::<I>::commit(&ck, p))
       .collect();
     timer_list.stop();
 
@@ -141,11 +153,11 @@ impl PolyList {
     prod
   }
 
-  pub fn open_q(
+  pub fn open(
+    &mut self,
     transcript: &mut PoseidonTranscript,
     comm_list: Vec<Commitment<I>>,
     ck: &CommitterKey<I>,
-    q: &DensePolynomial,
     point: &[Scalar],
     t: &<I as PairingEngine>::Fqk,
   ) -> (Commitment<I>, Proof<I>, MippProof<I>) {
@@ -153,38 +165,42 @@ impl PolyList {
     let a = &point[0..m];
     let b = &point[m..2 * m];
 
+    if self.q.is_none() {
+      self.get_q(point);
+    }
+
+    let q = self.q.clone().unwrap();
+
     let timer_open = Timer::new("sqrt_open");
 
     // Compute the PST commitment to q obtained as the inner products of the
     // commitments to the polynomials p_i and chi_i(a) for i ranging over the
     // boolean hypercube of size m.
     let m = a.len();
-    let pow_m = 2_usize.pow(m as u32);
     let timer_msm = Timer::new("msm");
-    let chis: Vec<_> = (0..pow_m)
-      .into_par_iter()
-      .map(|i| Self::get_chi_i(b, i))
-      .collect();
+    if self.chis_b.is_none() {
+      panic!("chis(b) should have been computed for q");
+    }
+    let chis = self.chis_b.clone().unwrap();
     let chis_repr: Vec<BigInteger256> = chis.par_iter().map(|y| y.into_repr()).collect();
-    assert!(chis.len() == comm_list.len());
+    assert!(chis_repr.len() == comm_list.len());
+
     let a_vec: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
 
     let c_u =
       VariableBaseMSM::multi_scalar_mul(a_vec.as_slice(), chis_repr.as_slice()).into_affine();
+    timer_msm.stop();
 
     let U: Commitment<I> = Commitment {
       nv: q.num_vars,
       g_product: c_u,
     };
-    timer_msm.stop();
-
-    let comm = MultilinearPC::<I>::commit(ck, q);
-    assert!(c_u == comm.g_product);
-
+    let comm = MultilinearPC::<I>::commit(ck, &q);
+    debug_assert!(c_u == comm.g_product);
     let h_vec = ck.powers_of_h[0].clone();
-    // TODO: MIPP proof that U is the inner product of the vector A
-    //  and the vector y, where A is the opening vector to T
 
+    // MIPP proof that U is the inner product of the vector A
+    //  and the vector y, where A is the opening vector to T
     let timer_mipp_proof = Timer::new("mipp_prove");
     let mipp_proof =
       MippProof::<I>::prove::<PoseidonTranscript>(transcript, ck, a_vec, chis, h_vec, &c_u, t)
@@ -195,7 +211,7 @@ impl PolyList {
     let timer_proof = Timer::new("pst_open");
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
-    let pst_proof = MultilinearPC::<I>::open(ck, q, &a_rev);
+    let pst_proof = MultilinearPC::<I>::open(ck, &q, &a_rev);
     timer_proof.stop();
 
     timer_open.stop();
@@ -204,7 +220,7 @@ impl PolyList {
     (U, pst_proof, mipp_proof)
   }
 
-  pub fn verify_q(
+  pub fn verify(
     transcript: &mut PoseidonTranscript,
     vk: &VerifierKey<I>,
     U: &Commitment<I>,
@@ -264,11 +280,8 @@ mod tests {
     let p = DensePolynomial::new(Z.clone());
     let res1 = p.evaluate(&r);
 
-    let mut r_new = r.to_vec();
-    // r_new.reverse();
-    let pl = PolyList::new(&Z.clone());
-    let q = pl.get_q(&r_new);
-    let res2 = PolyList::eval_q(q.clone(), &r_new);
+    let mut pl = Polynomial::from_evaluations(&Z.clone());
+    let res2 = pl.eval(&r);
 
     assert!(res1 == res2);
   }
@@ -290,22 +303,20 @@ mod tests {
     let gens = MultilinearPC::<I>::setup(2, &mut rng);
     let (ck, vk) = MultilinearPC::<I>::trim(&gens, 2);
 
-    let pl = PolyList::new(&Z.clone());
-    let q = pl.get_q(&r);
+    let mut pl = Polynomial::from_evaluations(&Z.clone());
 
-    let v = PolyList::eval_q(q.clone(), &r);
+    let v = pl.eval(&r);
 
-    let (comm_list, t) = PolyList::commit(&pl, &ck);
+    let (comm_list, t) = pl.commit(&ck);
 
     let params = poseidon_params();
     let mut prover_transcript = PoseidonTranscript::new(&params);
 
-    let (u, pst_proof, mipp_proof) =
-      PolyList::open_q(&mut prover_transcript, comm_list, &ck, &q, &r, &t);
+    let (u, pst_proof, mipp_proof) = pl.open(&mut prover_transcript, comm_list, &ck, &r, &t);
 
     let mut verifier_transcript = PoseidonTranscript::new(&params);
 
-    let res = PolyList::verify_q(
+    let res = Polynomial::verify(
       &mut verifier_transcript,
       &vk,
       &u,
