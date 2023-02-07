@@ -1,4 +1,3 @@
-extern crate byteorder;
 extern crate core;
 extern crate criterion;
 extern crate digest;

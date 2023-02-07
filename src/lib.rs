@@ -4,7 +4,6 @@
 #![allow(clippy::assertions_on_result_states)]
 
 extern crate ark_std;
-extern crate byteorder;
 extern crate core;
 extern crate digest;
 extern crate lazy_static;
@@ -46,7 +45,7 @@ mod constraints;
 pub mod poseidon_transcript;
 
 use ark_ff::Field;
-use ark_relations::r1cs;
+
 use ark_serialize::*;
 use ark_std::Zero;
 use core::cmp::max;

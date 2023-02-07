@@ -380,7 +380,7 @@ impl R1CSProof {
     input: &[Scalar],
     evals: &(Scalar, Scalar, Scalar),
     transcript: &mut PoseidonTranscript,
-    gens: &R1CSGens,
+    _gens: &R1CSGens,
   ) -> Result<usize, ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
     let mut bytes = Vec::new();

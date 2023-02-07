@@ -1,5 +1,5 @@
 #![allow(clippy::too_many_arguments)]
-use crate::group::Fr;
+
 use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
 use crate::timer::Timer;
 
@@ -14,14 +14,10 @@ use super::nizk::{DotProductProofGens, DotProductProofLog};
 use super::random::RandomTape;
 use super::scalar::Scalar;
 use super::transcript::{AppendToTranscript, ProofTranscript};
-use ark_bls12_377::{Bls12_377 as I, G1Affine};
-use ark_ec::msm::VariableBaseMSM;
-use ark_ec::{PairingEngine, ProjectiveCurve};
-use ark_ff::{One, PrimeField, UniformRand, Zero};
-use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
-use ark_poly_commit::multilinear_pc::data_structures::{
-  Commitment, CommitterKey, Proof, UniversalParams, VerifierKey,
-};
+use ark_bls12_377::Bls12_377 as I;
+use ark_ff::{One, UniformRand, Zero};
+use ark_poly::MultilinearExtension;
+use ark_poly_commit::multilinear_pc::data_structures::{CommitterKey, VerifierKey};
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::*;
 use core::ops::Index;
@@ -61,11 +57,11 @@ impl MultilinearExtension<Scalar> for DensePolynomial {
     }
   }
 
-  fn relabel(&self, a: usize, b: usize, k: usize) -> Self {
+  fn relabel(&self, _a: usize, _b: usize, _k: usize) -> Self {
     unimplemented!()
   }
 
-  fn fix_variables(&self, partial_point: &[Scalar]) -> Self {
+  fn fix_variables(&self, _partial_point: &[Scalar]) -> Self {
     unimplemented!()
   }
 

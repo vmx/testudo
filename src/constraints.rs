@@ -20,12 +20,11 @@ use ark_groth16::{
   Groth16, PreparedVerifyingKey, Proof as GrothProof,
 };
 
-use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof, VerifierKey};
+use ark_poly_commit::multilinear_pc::data_structures::Commitment;
 use ark_r1cs_std::{
   alloc::{AllocVar, AllocationMode},
   fields::fp::FpVar,
   prelude::{Boolean, EqGadget, FieldVar},
-  R1CSVar,
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, Namespace, SynthesisError};
 use ark_sponge::{
