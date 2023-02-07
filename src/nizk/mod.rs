@@ -8,7 +8,6 @@ use super::group::{CompressGroupElement, CompressedGroup, UnpackGroupElement};
 use super::random::RandomTape;
 use super::scalar::Scalar;
 
-
 use ark_serialize::*;
 use std::ops::Mul;
 

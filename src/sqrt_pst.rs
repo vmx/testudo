@@ -1,4 +1,7 @@
-use crate::mipp::MippProof;
+use crate::{
+  errors::ProofVerifyError,
+  mipp::{Error, MippProof},
+};
 use ark_bls12_377::{Bls12_377 as I, G1Projective as G1};
 use ark_ec::{pairing::Pairing, scalar_mul::variable_base::VariableBaseMSM, CurveGroup};
 use ark_ff::One;

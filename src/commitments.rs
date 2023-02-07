@@ -2,7 +2,7 @@ use super::group::{GroupElement, GroupElementAffine, VartimeMultiscalarMul, GROU
 use super::scalar::Scalar;
 use crate::group::CompressGroupElement;
 use crate::parameters::*;
-use ark_ec::{AffineRepr};
+use ark_ec::AffineRepr;
 
 use std::ops::Mul;
 
