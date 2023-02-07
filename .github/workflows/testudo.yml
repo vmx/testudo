@@ -1,12 +1,6 @@
 name: Build and Test Testudo
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-
-name: Test
+on: [push, pull_request]
 
 jobs:
   cargo-test:
