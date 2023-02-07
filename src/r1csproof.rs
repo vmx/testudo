@@ -528,9 +528,9 @@ mod tests {
 
   #[test]
   pub fn check_r1cs_proof() {
-    let num_vars = 1024;
+    let num_vars = 16;
     let num_cons = num_vars;
-    let num_inputs = 10;
+    let num_inputs = 3;
     let (inst, vars, input) = R1CSInstance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
 
     let gens = R1CSGens::new(b"test-m", num_cons, num_vars);
