@@ -8,7 +8,7 @@ use ark_poly_commit::multilinear_pc::data_structures::{
 };
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError, Write};
-
+use crate::transcript::Transcript;
 use ark_std::One;
 use ark_std::Zero;
 use rayon::iter::ParallelIterator;

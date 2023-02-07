@@ -1,11 +1,10 @@
 use std::str::FromStr;
-
+use ark_bls12_377::Fr;
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 // Copyright: https://github.com/nikkolasg/ark-dkg/blob/main/src/parameters.rs
 use json::JsonValue;
 use lazy_static::lazy_static;
 
-use crate::group::Fr;
 lazy_static! {
      // bls12377_rate2_constraints_fr:
 pub static ref FR: JsonValue = object! {

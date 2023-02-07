@@ -1,37 +1,38 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
-use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
-
 use super::dense_mlpoly::DensePolynomial;
 use super::errors::ProofVerifyError;
+use crate::poseidon_transcript::PoseidonTranscript;
+use crate::transcript::TranscriptWriter;
 
 use super::scalar::Scalar;
 use super::unipoly::UniPoly;
 
+use ark_ff::PrimeField;
 use ark_ff::Zero;
 use ark_serialize::*;
 
 use itertools::izip;
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
-pub struct SumcheckInstanceProof {
-  pub polys: Vec<UniPoly>,
+pub struct SumcheckInstanceProof<F: PrimeField> {
+  pub polys: Vec<UniPoly<F>>,
 }
 
-impl SumcheckInstanceProof {
-  pub fn new(polys: Vec<UniPoly>) -> SumcheckInstanceProof {
+impl<F: PrimeField> SumcheckInstanceProof<F> {
+  pub fn new(polys: Vec<UniPoly<F>>) -> Self {
     SumcheckInstanceProof { polys }
   }
 
   pub fn verify(
     &self,
-    claim: Scalar,
+    claim: F,
     num_rounds: usize,
     degree_bound: usize,
-    transcript: &mut PoseidonTranscript,
-  ) -> Result<(Scalar, Vec<Scalar>), ProofVerifyError> {
+    transcript: &mut PoseidonTranscript<F>,
+  ) -> Result<(F, Vec<F>), ProofVerifyError> {
     let mut e = claim;
-    let mut r: Vec<Scalar> = Vec::new();
+    let mut r: Vec<F> = Vec::new();
 
     // verify that there is a univariate polynomial for each round
     assert_eq!(self.polys.len(), num_rounds);
@@ -60,27 +61,27 @@ impl SumcheckInstanceProof {
   }
 }
 
-impl SumcheckInstanceProof {
-  pub fn prove_cubic_with_additive_term<F>(
-    claim: &Scalar,
+impl<F: PrimeField> SumcheckInstanceProof<F> {
+  pub fn prove_cubic_with_additive_term<C>(
+    claim: &F,
     num_rounds: usize,
-    poly_tau: &mut DensePolynomial,
-    poly_A: &mut DensePolynomial,
-    poly_B: &mut DensePolynomial,
-    poly_C: &mut DensePolynomial,
-    comb_func: F,
-    transcript: &mut PoseidonTranscript,
-  ) -> (Self, Vec<Scalar>, Vec<Scalar>)
+    poly_tau: &mut DensePolynomial<F>,
+    poly_A: &mut DensePolynomial<F>,
+    poly_B: &mut DensePolynomial<F>,
+    poly_C: &mut DensePolynomial<F>,
+    comb_func: C,
+    transcript: &mut PoseidonTranscript<F>,
+  ) -> (Self, Vec<F>, Vec<F>)
   where
-    F: Fn(&Scalar, &Scalar, &Scalar, &Scalar) -> Scalar,
+    C: Fn(&F, &F, &F, &F) -> F,
   {
     let mut e = *claim;
-    let mut r: Vec<Scalar> = Vec::new();
-    let mut cubic_polys: Vec<UniPoly> = Vec::new();
+    let mut r: Vec<F> = Vec::new();
+    let mut cubic_polys: Vec<UniPoly<F>> = Vec::new();
     for _j in 0..num_rounds {
-      let mut eval_point_0 = Scalar::zero();
-      let mut eval_point_2 = Scalar::zero();
-      let mut eval_point_3 = Scalar::zero();
+      let mut eval_point_0 = F::zero();
+      let mut eval_point_2 = F::zero();
+      let mut eval_point_3 = F::zero();
 
       let len = poly_tau.len() / 2;
       for i in 0..len {
@@ -118,7 +119,7 @@ impl SumcheckInstanceProof {
       let poly = UniPoly::from_evals(&evals);
 
       // append the prover's message to the transcript
-      poly.append_to_poseidon(transcript);
+      poly.write_to_transcript(transcript);
       //derive the verifier's challenge for the next round
       let r_j = transcript.challenge_scalar();
       r.push(r_j);
@@ -138,25 +139,25 @@ impl SumcheckInstanceProof {
       vec![poly_tau[0], poly_A[0], poly_B[0], poly_C[0]],
     )
   }
-  pub fn prove_cubic<F>(
-    claim: &Scalar,
+  pub fn prove_cubic<C>(
+    claim: &F,
     num_rounds: usize,
-    poly_A: &mut DensePolynomial,
-    poly_B: &mut DensePolynomial,
-    poly_C: &mut DensePolynomial,
-    comb_func: F,
-    transcript: &mut PoseidonTranscript,
-  ) -> (Self, Vec<Scalar>, Vec<Scalar>)
+    poly_A: &mut DensePolynomial<F>,
+    poly_B: &mut DensePolynomial<F>,
+    poly_C: &mut DensePolynomial<F>,
+    comb_func: C,
+    transcript: &mut PoseidonTranscript<F>,
+  ) -> (Self, Vec<F>, Vec<F>)
   where
-    F: Fn(&Scalar, &Scalar, &Scalar) -> Scalar,
+    C: Fn(&F, &F, &F) -> F,
   {
     let mut e = *claim;
-    let mut r: Vec<Scalar> = Vec::new();
-    let mut cubic_polys: Vec<UniPoly> = Vec::new();
+    let mut r: Vec<F> = Vec::new();
+    let mut cubic_polys: Vec<UniPoly<F>> = Vec::new();
     for _j in 0..num_rounds {
-      let mut eval_point_0 = Scalar::zero();
-      let mut eval_point_2 = Scalar::zero();
-      let mut eval_point_3 = Scalar::zero();
+      let mut eval_point_0 = F::zero();
+      let mut eval_point_2 = F::zero();
+      let mut eval_point_3 = F::zero();
 
       let len = poly_A.len() / 2;
       for i in 0..len {
@@ -189,7 +190,7 @@ impl SumcheckInstanceProof {
       let poly = UniPoly::from_evals(&evals);
 
       // append the prover's message to the transcript
-      poly.append_to_poseidon(transcript);
+      poly.write_to_transcript(transcript);
 
       //derive the verifier's challenge for the next round
       let r_j = transcript.challenge_scalar();
@@ -209,46 +210,46 @@ impl SumcheckInstanceProof {
     )
   }
 
-  pub fn prove_cubic_batched<F>(
-    claim: &Scalar,
+  pub fn prove_cubic_batched<C>(
+    claim: &F,
     num_rounds: usize,
     poly_vec_par: (
-      &mut Vec<&mut DensePolynomial>,
-      &mut Vec<&mut DensePolynomial>,
-      &mut DensePolynomial,
+      &mut Vec<&mut DensePolynomial<F>>,
+      &mut Vec<&mut DensePolynomial<F>>,
+      &mut DensePolynomial<F>,
     ),
     poly_vec_seq: (
-      &mut Vec<&mut DensePolynomial>,
-      &mut Vec<&mut DensePolynomial>,
-      &mut Vec<&mut DensePolynomial>,
+      &mut Vec<&mut DensePolynomial<F>>,
+      &mut Vec<&mut DensePolynomial<F>>,
+      &mut Vec<&mut DensePolynomial<F>>,
     ),
-    coeffs: &[Scalar],
-    comb_func: F,
-    transcript: &mut PoseidonTranscript,
+    coeffs: &[F],
+    comb_func: C,
+    transcript: &mut PoseidonTranscript<F>,
   ) -> (
     Self,
-    Vec<Scalar>,
-    (Vec<Scalar>, Vec<Scalar>, Scalar),
-    (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>),
+    Vec<F>,
+    (Vec<F>, Vec<F>, F),
+    (Vec<F>, Vec<F>, Vec<F>),
   )
   where
-    F: Fn(&Scalar, &Scalar, &Scalar) -> Scalar,
+    C: Fn(&F, &F, &F) -> F,
   {
     let (poly_A_vec_par, poly_B_vec_par, poly_C_par) = poly_vec_par;
     let (poly_A_vec_seq, poly_B_vec_seq, poly_C_vec_seq) = poly_vec_seq;
 
     //let (poly_A_vec_seq, poly_B_vec_seq, poly_C_vec_seq) = poly_vec_seq;
     let mut e = *claim;
-    let mut r: Vec<Scalar> = Vec::new();
-    let mut cubic_polys: Vec<UniPoly> = Vec::new();
+    let mut r: Vec<F> = Vec::new();
+    let mut cubic_polys: Vec<UniPoly<F>> = Vec::new();
 
     for _j in 0..num_rounds {
-      let mut evals: Vec<(Scalar, Scalar, Scalar)> = Vec::new();
+      let mut evals: Vec<(F, F, F)> = Vec::new();
 
       for (poly_A, poly_B) in poly_A_vec_par.iter().zip(poly_B_vec_par.iter()) {
-        let mut eval_point_0 = Scalar::zero();
-        let mut eval_point_2 = Scalar::zero();
-        let mut eval_point_3 = Scalar::zero();
+        let mut eval_point_0 = F::zero();
+        let mut eval_point_2 = F::zero();
+        let mut eval_point_3 = F::zero();
 
         let len = poly_A.len() / 2;
         for i in 0..len {
@@ -285,9 +286,9 @@ impl SumcheckInstanceProof {
         poly_B_vec_seq.iter(),
         poly_C_vec_seq.iter()
       ) {
-        let mut eval_point_0 = Scalar::zero();
-        let mut eval_point_2 = Scalar::zero();
-        let mut eval_point_3 = Scalar::zero();
+        let mut eval_point_0 = F::zero();
+        let mut eval_point_2 = F::zero();
+        let mut eval_point_3 = F::zero();
         let len = poly_A.len() / 2;
         for i in 0..len {
           // eval 0: bound_func is A(low)
@@ -327,7 +328,7 @@ impl SumcheckInstanceProof {
       let poly = UniPoly::from_evals(&evals);
 
       // append the prover's message to the transcript
-      poly.append_to_poseidon(transcript);
+      poly.write_to_transcript(transcript);
 
       //derive the verifier's challenge for the next round
       let r_j = transcript.challenge_scalar();
@@ -381,24 +382,24 @@ impl SumcheckInstanceProof {
     )
   }
 
-  pub fn prove_quad<F>(
-    claim: &Scalar,
+  pub fn prove_quad<C>(
+    claim: &F,
     num_rounds: usize,
-    poly_A: &mut DensePolynomial,
-    poly_B: &mut DensePolynomial,
-    comb_func: F,
-    transcript: &mut PoseidonTranscript,
-  ) -> (Self, Vec<Scalar>, Vec<Scalar>)
+    poly_A: &mut DensePolynomial<F>,
+    poly_B: &mut DensePolynomial<F>,
+    comb_func: C,
+    transcript: &mut PoseidonTranscript<F>,
+  ) -> (Self, Vec<F>, Vec<F>)
   where
-    F: Fn(&Scalar, &Scalar) -> Scalar,
+    C: Fn(&F, &F) -> F,
   {
     let mut e = *claim;
-    let mut r: Vec<Scalar> = Vec::new();
-    let mut quad_polys: Vec<UniPoly> = Vec::new();
+    let mut r: Vec<F> = Vec::new();
+    let mut quad_polys: Vec<UniPoly<F>> = Vec::new();
 
     for _j in 0..num_rounds {
-      let mut eval_point_0 = Scalar::zero();
-      let mut eval_point_2 = Scalar::zero();
+      let mut eval_point_0 = F::zero();
+      let mut eval_point_2 = F::zero();
 
       let len = poly_A.len() / 2;
       for i in 0..len {
@@ -415,7 +416,7 @@ impl SumcheckInstanceProof {
       let poly = UniPoly::from_evals(&evals);
 
       // append the prover's message to the transcript
-      poly.append_to_poseidon(transcript);
+      poly.write_to_transcript(transcript);
 
       //derive the verifier's challenge for the next round
       let r_j = transcript.challenge_scalar();
