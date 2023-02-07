@@ -7,7 +7,7 @@ use crate::group::{Fq, Fr};
 use crate::math::Math;
 use crate::mipp::MippProof;
 use crate::parameters::poseidon_params;
-use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
+use crate::poseidon_transcript::PoseidonTranscript;
 use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
 use ark_bls12_377::Bls12_377 as I;
@@ -245,7 +245,6 @@ impl R1CSProof {
     // with the evaluation in ark-poly-commit so that reversing is not needed
     // anymore
     let timmer_opening = Timer::new("polyopening");
-    timer_prove.stop();
 
     let (comm, proof_eval_vars_at_ry, mipp_proof) =
       pl.open(transcript, comm_list, &gens.gens_pc.ck, &ry[1..], &t);
@@ -259,7 +258,7 @@ impl R1CSProof {
     let timer_polyeval = Timer::new("polyeval");
     let eval_vars_at_ry = pl.eval(&ry[1..]);
     timer_polyeval.stop();
-
+    timer_prove.stop();
     (
       R1CSProof {
         comm,
@@ -382,7 +381,7 @@ impl R1CSProof {
     input: &[Scalar],
     evals: &(Scalar, Scalar, Scalar),
     transcript: &mut PoseidonTranscript,
-    gens: &R1CSGens,
+    _gens: &R1CSGens,
   ) -> Result<usize, ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
     let mut bytes = Vec::new();

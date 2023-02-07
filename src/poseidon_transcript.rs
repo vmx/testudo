@@ -23,7 +23,7 @@ impl Transcript for PoseidonTranscript {
     self.sponge.absorb(&b"testudo".to_vec());
   }
 
-  fn append<S: CanonicalSerialize>(&mut self, label: &'static [u8], point: &S) {
+  fn append<S: CanonicalSerialize>(&mut self, _label: &'static [u8], point: &S) {
     let mut buf = Vec::new();
     point
       .serialize_with_mode(&mut buf, Compress::Yes)
@@ -31,7 +31,7 @@ impl Transcript for PoseidonTranscript {
     self.sponge.absorb(&buf);
   }
 
-  fn challenge_scalar<F: PrimeField>(&mut self, label: &'static [u8]) -> F {
+  fn challenge_scalar<F: PrimeField>(&mut self, _label: &'static [u8]) -> F {
     self.sponge.squeeze_field_elements(1).remove(0)
   }
 }

@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
-use crate::group::Fr;
+
 use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
-use crate::timer::Timer;
+
 
 use super::commitments::{Commitments, MultiCommitGens};
 use super::errors::ProofVerifyError;
@@ -61,11 +61,11 @@ impl MultilinearExtension<Scalar> for DensePolynomial {
     }
   }
 
-  fn relabel(&self, a: usize, b: usize, k: usize) -> Self {
+  fn relabel(&self, _a: usize, _b: usize, _k: usize) -> Self {
     unimplemented!()
   }
 
-  fn fix_variables(&self, partial_point: &[Scalar]) -> Self {
+  fn fix_variables(&self, _partial_point: &[Scalar]) -> Self {
     unimplemented!()
   }
 
@@ -593,7 +593,7 @@ impl PolyEvalProof {
 
 #[cfg(test)]
 mod tests {
-  use std::num;
+  
 
   use crate::parameters::poseidon_params;
 

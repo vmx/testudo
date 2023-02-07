@@ -28,7 +28,6 @@ use ark_r1cs_std::{
   alloc::{AllocVar, AllocationMode},
   fields::fp::FpVar,
   prelude::{Boolean, EqGadget, FieldVar},
-  R1CSVar,
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, Namespace, SynthesisError};
 use rand::{CryptoRng, Rng};

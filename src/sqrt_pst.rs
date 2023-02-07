@@ -6,7 +6,7 @@ use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
 };
-use ark_serialize::CanonicalSerialize;
+
 use rayon::prelude::{
   IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -15,9 +15,8 @@ use super::scalar::Scalar;
 use crate::{
   dense_mlpoly::DensePolynomial,
   math::Math,
-  poseidon_transcript::{AppendToPoseidon, PoseidonTranscript},
+  poseidon_transcript::{PoseidonTranscript},
   timer::Timer,
-  transcript,
 };
 
 pub struct Polynomial {
@@ -45,6 +44,8 @@ impl Polynomial {
       .map(|i| {
         let z: Vec<Scalar> = (0..pow_m)
           .into_par_iter()
+          // viewing the list of evaluation as a square matrix
+          // we select by row i and column j
           .map(|j| Z[(j << m) | i])
           .collect();
         DensePolynomial::new(z)
@@ -67,7 +68,7 @@ impl Polynomial {
   fn get_q(&mut self, point: &[Scalar]) {
     let q_timer = Timer::new("build_q");
     debug_assert!(point.len() == 2 * self.m);
-    let a = &point[0..self.m];
+    let _a = &point[0..self.m];
     let b = &point[self.m..2 * self.m];
     let pow_m = 2_usize.pow(self.m as u32);
 
@@ -90,7 +91,7 @@ impl Polynomial {
   // compute q(b) = p(a,b).
   pub fn eval(&mut self, point: &[Scalar]) -> Scalar {
     let a = &point[0..point.len() / 2];
-    let b = &point[point.len() / 2..point.len()];
+    let _b = &point[point.len() / 2..point.len()];
     if self.q.is_none() {
       self.get_q(point);
     }
@@ -138,11 +139,13 @@ impl Polynomial {
     (comm_list, t)
   }
 
+  // computes \chi_i(\vec{b}) = \prod_{i_j = 0}(1 - b_j)\prod_{i_j = 1}(b_j)
   pub fn get_chi_i(b: &[Scalar], i: usize) -> Scalar {
     let m = b.len();
     let mut prod = Scalar::one();
     for j in 0..m {
       let b_j = b[j];
+      // iterate from msb to lsb of i to build chi_i as defined above
       if i >> (m - j - 1) & 1 == 1 {
         prod = prod * b_j;
       } else {
@@ -162,13 +165,6 @@ impl Polynomial {
   ) -> (Commitment<I>, Proof<I>, MippProof<I>) {
     let m = point.len() / 2;
     let a = &point[0..m];
-
-    if self.q.is_none() {
-      self.get_q(point);
-    }
-
-    let q = self.q.clone().unwrap();
-
     if self.q.is_none() {
       self.get_q(point);
     }
@@ -180,7 +176,7 @@ impl Polynomial {
     // Compute the PST commitment to q obtained as the inner products of the
     // commitments to the polynomials p_i and chi_i(a) for i ranging over the
     // boolean hypercube of size m.
-    let m = a.len();
+    let _m = a.len();
     let timer_msm = Timer::new("msm");
     if self.chis_b.is_none() {
       panic!("chis(b) should have been computed for q");
@@ -203,8 +199,8 @@ impl Polynomial {
     debug_assert!(c_u == comm.g_product);
     let h_vec = ck.powers_of_h[0].clone();
 
-    // MIPP proof that U is the inner product of the vector A
-    //  and the vector y, where A is the opening vector to T
+    // construct MIPP proof that U is the inner product of the vector A
+    // and the vector y, where A is the opening vector to T
     let timer_mipp_proof = Timer::new("mipp_prove");
     let mipp_proof = MippProof::<I>::prove::<PoseidonTranscript>(
       transcript,
@@ -218,10 +214,11 @@ impl Polynomial {
     .unwrap();
     timer_mipp_proof.stop();
 
-    // PST proof for opening q at a
     let timer_proof = Timer::new("pst_open");
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
+
+    // construct PST proof for opening q at a
     let pst_proof = MultilinearPC::<I>::open(ck, &q, &a_rev);
     timer_proof.stop();
 
@@ -242,7 +239,9 @@ impl Polynomial {
     let len = point.len();
     let a = &point[0..len / 2];
     let b = &point[len / 2..len];
+
     let timer_mipp_verify = Timer::new("mipp_verify");
+    // verify that U = A^y where A is the opening vector of T
     let res_mipp = MippProof::<I>::verify::<PoseidonTranscript>(
       vk,
       transcript,
@@ -257,6 +256,8 @@ impl Polynomial {
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
     let timer_pst_verify = Timer::new("pst_verify");
+
+    // verify that q(a) is indeed v
     let res = MultilinearPC::<I>::check(vk, U, &a_rev, v, pst_proof);
     timer_pst_verify.stop();
     res
@@ -265,12 +266,12 @@ impl Polynomial {
 
 #[cfg(test)]
 mod tests {
-  use std::clone;
+  
 
   use crate::parameters::poseidon_params;
 
   use super::*;
-  use ark_ff::Zero;
+  
   use ark_std::UniformRand;
   #[test]
   fn check_sqrt_poly_eval() {
