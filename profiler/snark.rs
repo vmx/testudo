@@ -48,7 +48,9 @@ pub fn main() {
     );
 
     let mut proof_encoded = Vec::new();
-    proof.serialize(&mut proof_encoded).unwrap();
+    proof
+      .serialize_with_mode(&mut proof_encoded, Compress::Yes)
+      .unwrap();
     let msg_proof_len = format!("SNARK::proof_compressed_len {:?}", proof_encoded.len());
     print(&msg_proof_len);
 

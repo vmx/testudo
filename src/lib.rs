@@ -397,7 +397,9 @@ impl SNARK {
       };
 
       let mut proof_encoded: Vec<u8> = Vec::new();
-      proof.serialize(&mut proof_encoded).unwrap();
+      proof
+        .serialize_with_mode(&mut proof_encoded, Compress::Yes)
+        .unwrap();
       Timer::print(&format!("len_r1cs_sat_proof {:?}", proof_encoded.len()));
 
       (proof, rx, ry)
@@ -434,7 +436,9 @@ impl SNARK {
       );
 
       let mut proof_encoded: Vec<u8> = Vec::new();
-      proof.serialize(&mut proof_encoded).unwrap();
+      proof
+        .serialize_with_mode(&mut proof_encoded, Compress::Yes)
+        .unwrap();
       Timer::print(&format!("len_r1cs_eval_proof {:?}", proof_encoded.len()));
       proof
     };
@@ -573,7 +577,9 @@ impl NIZK {
         // &mut random_tape,
       );
       let mut proof_encoded = Vec::new();
-      proof.serialize(&mut proof_encoded).unwrap();
+      proof
+        .serialize_with_mode(&mut proof_encoded, Compress::Yes)
+        .unwrap();
       Timer::print(&format!("len_r1cs_sat_proof {:?}", proof_encoded.len()));
       (proof, rx, ry)
     };
@@ -770,24 +776,24 @@ mod tests {
     let mut C: Vec<(usize, usize, Vec<u8>)> = Vec::new();
 
     // Create a^2 + b + 13
-    A.push((0, num_vars + 2, (Scalar::one().into_repr().to_bytes_le()))); // 1*a
-    B.push((0, num_vars + 2, Scalar::one().into_repr().to_bytes_le())); // 1*a
-    C.push((0, num_vars + 1, Scalar::one().into_repr().to_bytes_le())); // 1*z
+    A.push((0, num_vars + 2, (Scalar::one().into_bigint().to_bytes_le()))); // 1*a
+    B.push((0, num_vars + 2, Scalar::one().into_bigint().to_bytes_le()));// 1*a
+    C.push((0, num_vars + 1, Scalar::one().into_bigint().to_bytes_le())); // 1*z
     C.push((
       0,
       num_vars,
-      (-Scalar::from(13u64)).into_repr().to_bytes_le(),
+      (-Scalar::from(13u64)).into_bigint().to_bytes_le(),
     )); // -13*1
-    C.push((0, num_vars + 3, (-Scalar::one()).into_repr().to_bytes_le())); // -1*b
+    C.push((0, num_vars + 3, (-Scalar::one()).into_bigint().to_bytes_le())); // -1*b
 
     // Var Assignments (Z_0 = 16 is the only output)
-    let vars = vec![Scalar::zero().into_repr().to_bytes_le(); num_vars];
+    let vars = vec![Scalar::zero().into_bigint().to_bytes_le(); num_vars];
 
     // create an InputsAssignment (a = 1, b = 2)
-    let mut inputs = vec![Scalar::zero().into_repr().to_bytes_le(); num_inputs];
-    inputs[0] = Scalar::from(16u64).into_repr().to_bytes_le();
-    inputs[1] = Scalar::from(1u64).into_repr().to_bytes_le();
-    inputs[2] = Scalar::from(2u64).into_repr().to_bytes_le();
+    let mut inputs = vec![Scalar::zero().into_bigint().to_bytes_le(); num_inputs];
+    inputs[0] = Scalar::from(16u64).into_bigint().to_bytes_le();
+    inputs[1] = Scalar::from(1u64).into_bigint().to_bytes_le();
+    inputs[2] = Scalar::from(2u64).into_bigint().to_bytes_le();
 
     let assignment_inputs = InputsAssignment::new(&inputs).unwrap();
     let assignment_vars = VarsAssignment::new(&vars).unwrap();

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use ark_sponge::poseidon::PoseidonParameters;
+use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 // Copyright: https://github.com/nikkolasg/ark-dkg/blob/main/src/parameters.rs
 use json::JsonValue;
 use lazy_static::lazy_static;
@@ -145,7 +145,7 @@ array!["228517621981785468369663538305998424621845824654552006112396193307208970
 }
 
 /// TODO
-pub fn poseidon_params() -> PoseidonParameters<Fr> {
+pub fn poseidon_params() -> PoseidonConfig<Fr> {
   let arks = FR["ark"]
     .members()
     .map(|ark| {
@@ -163,15 +163,19 @@ pub fn poseidon_params() -> PoseidonParameters<Fr> {
         .collect::<Vec<_>>()
     })
     .collect::<Vec<_>>();
-  PoseidonParameters::new(
-    FR["full_rounds"].as_u32().unwrap(),
-    FR["partial_rounds"].as_u32().unwrap(),
+  PoseidonConfig::new(
+    FR["full_rounds"].as_usize().unwrap(),
+    FR["partial_rounds"].as_usize().unwrap(),
     FR["alpha"].as_u64().unwrap(),
     mds,
     arks,
+    FR["rate"].as_usize().unwrap(),
+    // TODO (nikkolasg): check out the concrete parameters for the capacity
+    // so far taken from https://github.com/AleoHQ/snarkVM/blob/d6ce2d3540b9355b59ef580db998188c786f8599/fields/src/traits/poseidon_default.rs#L43
+    1,
   )
 }
 
 lazy_static! {
-  pub static ref POSEIDON_PARAMETERS_FR_377: PoseidonParameters<Fr> = poseidon_params();
+  pub static ref POSEIDON_PARAMETERS_FR_377: PoseidonConfig<Fr> = poseidon_params();
 }

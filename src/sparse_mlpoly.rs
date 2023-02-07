@@ -1207,7 +1207,7 @@ impl ProductLayerProof {
 
     let mut product_layer_proof_encoded: Vec<u8> = Vec::new();
     product_layer_proof
-      .serialize(&mut product_layer_proof_encoded)
+      .serialize_with_mode(&mut product_layer_proof_encoded, Compress::Yes)
       .unwrap();
     let msg = format!(
       "len_product_layer_proof {:?}",

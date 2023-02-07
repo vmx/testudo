@@ -149,7 +149,7 @@ impl R1CSInstance {
 
   pub fn get_digest(&self) -> Vec<u8> {
     let mut bytes = Vec::new();
-    self.serialize(&mut bytes).unwrap();
+    self.serialize_with_mode(&mut bytes,Compress::Yes).unwrap();
     let mut shake = Shake256::default();
     shake.input(bytes);
     let mut reader = shake.xof_result();

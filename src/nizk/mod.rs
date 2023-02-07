@@ -7,9 +7,10 @@ use super::errors::ProofVerifyError;
 use super::group::{CompressGroupElement, CompressedGroup, UnpackGroupElement};
 use super::random::RandomTape;
 use super::scalar::Scalar;
-use ark_ec::ProjectiveCurve;
-use ark_ff::PrimeField;
+
+
 use ark_serialize::*;
+use std::ops::Mul;
 
 mod bullet;
 use bullet::BulletReductionProof;
@@ -169,11 +170,9 @@ impl DotProductProofLog {
     let z1_s = &self.z1;
     let z2_s = &self.z2;
 
-    let lhs =
-      ((Gamma_hat.mul(c_s.into_repr()) + beta_s).mul(a_hat_s.into_repr()) + delta_s).compress();
-    let rhs = ((g_hat + gens.gens_1.G[0].mul(a_hat_s.into_repr())).mul(z1_s.into_repr())
-      + gens.gens_1.h.mul(z2_s.into_repr()))
-    .compress();
+    let lhs = ((Gamma_hat.mul(c_s) + beta_s).mul(a_hat_s) + delta_s).compress();
+    let rhs =
+      ((g_hat + gens.gens_1.G[0].mul(a_hat_s)).mul(z1_s) + gens.gens_1.h.mul(z2_s)).compress();
 
     assert_eq!(lhs, rhs);
 

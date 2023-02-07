@@ -1,7 +1,7 @@
 use crate::mipp::MippProof;
-use ark_bls12_377::{Bls12_377 as I};
-use ark_ec::{msm::VariableBaseMSM, PairingEngine, ProjectiveCurve};
-use ark_ff::{BigInteger256, One, PrimeField};
+use ark_bls12_377::{Bls12_377 as I, G1Projective as G1};
+use ark_ec::{pairing::Pairing, scalar_mul::variable_base::VariableBaseMSM, CurveGroup};
+use ark_ff::{One};
 use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
@@ -103,7 +103,7 @@ impl Polynomial {
     prods.sum()
   }
 
-  pub fn commit(&self, ck: &CommitterKey<I>) -> (Vec<Commitment<I>>, <I as PairingEngine>::Fqk) {
+  pub fn commit(&self, ck: &CommitterKey<I>) -> (Vec<Commitment<I>>, <I as Pairing>::TargetField) {
     let timer_commit = Timer::new("sqrt_commit");
 
     let timer_list = Timer::new("comm_list");
@@ -120,19 +120,18 @@ impl Polynomial {
     assert!(comm_list.len() == h_vec.len());
 
     let ipp_timer = Timer::new("ipp");
-    let pairings: Vec<_> = comm_list
+    let left_pairs: Vec<_> = comm_list
       .clone()
       .into_par_iter()
-      .map(|c| <I as PairingEngine>::G1Prepared::from(c.g_product))
-      .zip(
-        h_vec
-          .into_par_iter()
-          .map(|h| <I as PairingEngine>::G2Prepared::from(h)),
-      )
+      .map(|c| <I as Pairing>::G1Prepared::from(c.g_product))
+      .collect();
+    let right_pairs: Vec<_> = h_vec
+      .into_par_iter()
+      .map(|h| <I as Pairing>::G2Prepared::from(h))
       .collect();
 
     // compute the IPP commitment
-    let t = I::product_of_pairings(pairings.iter());
+    let t = I::multi_pairing(left_pairs, right_pairs).0;
     ipp_timer.stop();
 
     timer_commit.stop();
@@ -162,7 +161,7 @@ impl Polynomial {
     comm_list: Vec<Commitment<I>>,
     ck: &CommitterKey<I>,
     point: &[Scalar],
-    t: &<I as PairingEngine>::Fqk,
+    t: &<I as Pairing>::TargetField,
   ) -> (Commitment<I>, Proof<I>, MippProof<I>) {
     let m = point.len() / 2;
     let a = &point[0..m];
@@ -182,14 +181,14 @@ impl Polynomial {
     if self.chis_b.is_none() {
       panic!("chis(b) should have been computed for q");
     }
+    // TODO remove that cloning - the whole option thing
     let chis = self.chis_b.clone().unwrap();
-    let chis_repr: Vec<BigInteger256> = chis.par_iter().map(|y| y.into_repr()).collect();
-    assert!(chis_repr.len() == comm_list.len());
+    assert!(chis.len() == comm_list.len());
 
     let a_vec: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
 
     let c_u =
-      VariableBaseMSM::multi_scalar_mul(a_vec.as_slice(), chis_repr.as_slice()).into_affine();
+      <G1 as VariableBaseMSM>::msm_unchecked(a_vec.as_slice(), chis.as_slice()).into_affine();
     timer_msm.stop();
 
     let U: Commitment<I> = Commitment {
@@ -203,9 +202,16 @@ impl Polynomial {
     // construct MIPP proof that U is the inner product of the vector A
     // and the vector y, where A is the opening vector to T
     let timer_mipp_proof = Timer::new("mipp_prove");
-    let mipp_proof =
-      MippProof::<I>::prove::<PoseidonTranscript>(transcript, ck, a_vec, chis, h_vec, &c_u, t)
-        .unwrap();
+    let mipp_proof = MippProof::<I>::prove::<PoseidonTranscript>(
+      transcript,
+      ck,
+      a_vec,
+      chis.to_vec(),
+      h_vec,
+      &c_u,
+      t,
+    )
+    .unwrap();
     timer_mipp_proof.stop();
 
     let timer_proof = Timer::new("pst_open");
@@ -228,7 +234,7 @@ impl Polynomial {
     v: Scalar,
     pst_proof: &Proof<I>,
     mipp_proof: &MippProof<I>,
-    T: &<I as PairingEngine>::Fqk,
+    T: &<I as Pairing>::TargetField,
   ) -> bool {
     let len = point.len();
     let a = &point[0..len / 2];
