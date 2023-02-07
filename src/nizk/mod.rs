@@ -9,9 +9,10 @@ use super::group::{
 };
 use super::random::RandomTape;
 use super::scalar::Scalar;
-use ark_ec::ProjectiveCurve;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use ark_serialize::*;
+use std::ops::Mul;
 
 mod bullet;
 use bullet::BulletReductionProof;
@@ -68,7 +69,7 @@ impl KnowledgeProof {
     let c = transcript.challenge_scalar();
 
     let lhs = self.z1.commit(&self.z2, gens_n).compress();
-    let rhs = (C.unpack()?.mul(c.into_repr()) + self.alpha.unpack()?).compress();
+    let rhs = (C.unpack()?.mul(c) + self.alpha.unpack()?).compress();
 
     if lhs == rhs {
       Ok(())
@@ -109,7 +110,7 @@ impl EqualityProof {
     let C2 = v2.commit(s2, gens_n).compress();
     transcript.append_point(&C2);
 
-    let alpha = gens_n.h.mul(r.into_repr()).compress();
+    let alpha = gens_n.h.mul(r).compress();
     transcript.append_point(&alpha);
 
     let c = transcript.challenge_scalar();
@@ -135,11 +136,11 @@ impl EqualityProof {
     let c = transcript.challenge_scalar();
     let rhs = {
       let C = C1.unpack()? - C2.unpack()?;
-      (C.mul(c.into_repr()) + self.alpha.unpack()?).compress()
+      (C.mul(c) + self.alpha.unpack()?).compress()
     };
     println!("rhs {:?}", rhs);
 
-    let lhs = gens_n.h.mul(self.z.into_repr()).compress();
+    let lhs = gens_n.h.mul(self.z).compress();
     println!("lhs {:?}", lhs);
     if lhs == rhs {
       Ok(())
@@ -248,9 +249,8 @@ impl ProductProof {
     z2: &Scalar,
   ) -> bool {
     println!("{:?}", X);
-    let lhs = (GroupElement::decompress(P).unwrap()
-      + GroupElement::decompress(X).unwrap().mul(c.into_repr()))
-    .compress();
+    let lhs = (GroupElement::decompress(P).unwrap() + GroupElement::decompress(X).unwrap().mul(c))
+      .compress();
     let rhs = z1.commit(z2, gens_n).compress();
 
     lhs == rhs
@@ -404,12 +404,12 @@ impl DotProductProof {
 
     let c = transcript.challenge_scalar();
 
-    let mut result = Cx.unpack()?.mul(c.into_repr()) + self.delta.unpack()?
-      == self.z.commit(&self.z_delta, gens_n);
+    let mut result =
+      Cx.unpack()?.mul(c) + self.delta.unpack()? == self.z.commit(&self.z_delta, gens_n);
 
     let dotproduct_z_a = DotProductProof::compute_dotproduct(&self.z, a);
-    result &= Cy.unpack()?.mul(c.into_repr()) + self.beta.unpack()?
-      == dotproduct_z_a.commit(&self.z_beta, gens_1);
+    result &=
+      Cy.unpack()?.mul(c) + self.beta.unpack()? == dotproduct_z_a.commit(&self.z_beta, gens_1);
     if result {
       Ok(())
     } else {
@@ -573,10 +573,9 @@ impl DotProductProofLog {
     let z1_s = &self.z1;
     let z2_s = &self.z2;
 
-    let lhs =
-      ((Gamma_hat.mul(c_s.into_repr()) + beta_s).mul(a_hat_s.into_repr()) + delta_s).compress();
-    let rhs = ((g_hat + gens.gens_1.G[0].mul(a_hat_s.into_repr())).mul(z1_s.into_repr())
-      + gens.gens_1.h.mul(z2_s.into_repr()))
+    let lhs = ((Gamma_hat.mul(c_s) + beta_s).mul(a_hat_s) + delta_s).compress();
+    let rhs = ((g_hat + gens.gens_1.G[0].mul(a_hat_s)).mul(z1_s)
+      + gens.gens_1.h.mul(z2_s))
     .compress();
 
     assert_eq!(lhs, rhs);

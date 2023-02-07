@@ -1,12 +1,12 @@
 use crate::errors::ProofVerifyError;
-use ark_ec::msm::VariableBaseMSM;
+use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
+use ark_ec::Group;
 use ark_ff::PrimeField;
-
 use lazy_static::lazy_static;
 
 use super::scalar::Scalar;
 
-use ark_ec::ProjectiveCurve;
+use ark_ec::CurveGroup;
 use ark_serialize::*;
 use core::borrow::Borrow;
 
@@ -19,7 +19,7 @@ pub type Fr = ark_bls12_377::Fr;
 pub struct CompressedGroup(pub Vec<u8>);
 
 lazy_static! {
-  pub static ref GROUP_BASEPOINT: GroupElement = GroupElement::prime_subgroup_generator();
+  pub static ref GROUP_BASEPOINT: GroupElement = GroupElement::generator();
 }
 
 pub trait CompressGroupElement {
@@ -37,14 +37,16 @@ pub trait UnpackGroupElement {
 impl CompressGroupElement for GroupElement {
   fn compress(&self) -> CompressedGroup {
     let mut point_encoding = Vec::new();
-    self.serialize(&mut point_encoding).unwrap();
+    self
+      .serialize_with_mode(&mut point_encoding, Compress::Yes)
+      .unwrap();
     CompressedGroup(point_encoding)
   }
 }
 
 impl DecompressGroupElement for GroupElement {
   fn decompress(encoded: &CompressedGroup) -> Option<Self> {
-    let res = GroupElement::deserialize(&*encoded.0);
+    let res = GroupElement::deserialize_compressed(&*encoded.0);
     if let Ok(r) = res {
       Some(r)
     } else {
@@ -67,14 +69,11 @@ pub trait VartimeMultiscalarMul {
 
 impl VartimeMultiscalarMul for GroupElement {
   fn vartime_multiscalar_mul(scalars: &[Scalar], points: &[GroupElement]) -> GroupElement {
-    let repr_scalars = scalars
-      .iter()
-      .map(|S| S.borrow().into_repr())
-      .collect::<Vec<<Scalar as PrimeField>::BigInt>>();
+    assert!(scalars.len() == points.len());
     let aff_points = points
       .iter()
       .map(|P| P.borrow().into_affine())
       .collect::<Vec<GroupElementAffine>>();
-    VariableBaseMSM::multi_scalar_mul(aff_points.as_slice(), repr_scalars.as_slice())
+    <Self as VariableBaseMSM>::msm_unchecked(aff_points.as_slice(), scalars)
   }
 }

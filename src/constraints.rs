@@ -10,9 +10,8 @@ use crate::{
 
 use ark_bls12_377::{constraints::PairingVar as IV, Bls12_377 as I, Fr};
 
-use ark_crypto_primitives::{
-  snark::BooleanInputVar, CircuitSpecificSetupSNARK, SNARKGadget, SNARK,
-};
+use ark_crypto_primitives::snark::{BooleanInputVar, SNARKGadget};
+use ark_snark::{CircuitSpecificSetupSNARK, SNARK};
 
 use ark_ff::{BitIteratorLE, PrimeField, Zero};
 use ark_groth16::{
@@ -20,6 +19,10 @@ use ark_groth16::{
   Groth16, PreparedVerifyingKey, Proof as GrothProof,
 };
 
+use ark_crypto_primitives::sponge::{
+  constraints::CryptographicSpongeVar,
+  poseidon::{constraints::PoseidonSpongeVar, PoseidonConfig},
+};
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof, VerifierKey};
 use ark_r1cs_std::{
   alloc::{AllocVar, AllocationMode},
@@ -28,24 +31,16 @@ use ark_r1cs_std::{
   R1CSVar,
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, Namespace, SynthesisError};
-use ark_sponge::{
-  constraints::CryptographicSpongeVar,
-  poseidon::{constraints::PoseidonSpongeVar, PoseidonParameters},
-};
 use rand::{CryptoRng, Rng};
 
 pub struct PoseidonTranscripVar {
   pub cs: ConstraintSystemRef<Fr>,
   pub sponge: PoseidonSpongeVar<Fr>,
-  pub params: PoseidonParameters<Fr>,
+  pub params: PoseidonConfig<Fr>,
 }
 
 impl PoseidonTranscripVar {
-  fn new(
-    cs: ConstraintSystemRef<Fr>,
-    params: &PoseidonParameters<Fr>,
-    challenge: Option<Fr>,
-  ) -> Self {
+  fn new(cs: ConstraintSystemRef<Fr>, params: &PoseidonConfig<Fr>, challenge: Option<Fr>) -> Self {
     let mut sponge = PoseidonSpongeVar::new(cs.clone(), params);
 
     if let Some(c) = challenge {
@@ -246,7 +241,7 @@ pub struct R1CSVerificationCircuit {
   pub input: Vec<Fr>,
   pub input_as_sparse_poly: SparsePolynomial,
   pub evals: (Fr, Fr, Fr),
-  pub params: PoseidonParameters<Fr>,
+  pub params: PoseidonConfig<Fr>,
   pub prev_challenge: Fr,
   pub claims_phase2: (Scalar, Scalar, Scalar, Scalar),
   pub eval_vars_at_ry: Fr,
@@ -412,7 +407,7 @@ pub struct VerifierConfig {
   pub input: Vec<Fr>,
   pub input_as_sparse_poly: SparsePolynomial,
   pub evals: (Fr, Fr, Fr),
-  pub params: PoseidonParameters<Fr>,
+  pub params: PoseidonConfig<Fr>,
   pub prev_challenge: Fr,
   pub claims_phase2: (Fr, Fr, Fr, Fr),
   pub eval_vars_at_ry: Fr,
@@ -465,7 +460,7 @@ impl ConstraintSynthesizer<Fq> for VerifierCircuit {
     let bits = pubs
       .iter()
       .map(|c| {
-        let bits: Vec<bool> = BitIteratorLE::new(c.into_repr().as_ref().to_vec()).collect();
+        let bits: Vec<bool> = BitIteratorLE::new(c.into_bigint().as_ref().to_vec()).collect();
         Vec::new_witness(cs.clone(), || Ok(bits))
       })
       .collect::<Result<Vec<_>, _>>()?;

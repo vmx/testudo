@@ -1,21 +1,21 @@
-use crate::group::{CompressedGroup, Fr};
-
 use super::scalar::Scalar;
+use crate::group::{CompressedGroup, Fr};
 use crate::mipp::Transcript;
 use ark_bls12_377::{Bls12_377 as I, G1Affine};
-use ark_ec::PairingEngine;
+use ark_crypto_primitives::sponge::{
+  poseidon::{PoseidonConfig, PoseidonSponge},
+  CryptographicSponge,
+};
+use ark_ec::pairing::Pairing;
 use ark_ff::{Field, PrimeField};
 use ark_poly_commit::multilinear_pc::data_structures::Commitment;
 use ark_serialize::CanonicalSerialize;
-use ark_sponge::{
-  poseidon::{PoseidonParameters, PoseidonSponge},
-  CryptographicSponge,
-};
+use ark_serialize::Compress;
 #[derive(Clone)]
 /// TODO
 pub struct PoseidonTranscript {
   sponge: PoseidonSponge<Fr>,
-  params: PoseidonParameters<Fr>,
+  params: PoseidonConfig<Fr>,
 }
 
 impl Transcript for PoseidonTranscript {
@@ -25,7 +25,9 @@ impl Transcript for PoseidonTranscript {
 
   fn append<S: CanonicalSerialize>(&mut self, label: &'static [u8], point: &S) {
     let mut buf = Vec::new();
-    point.serialize(&mut buf).expect("serialization failed");
+    point
+      .serialize_with_mode(&mut buf, Compress::Yes)
+      .expect("serialization failed");
     self.sponge.absorb(&buf);
   }
 
@@ -36,7 +38,7 @@ impl Transcript for PoseidonTranscript {
 
 impl PoseidonTranscript {
   /// create a new transcript
-  pub fn new(params: &PoseidonParameters<Fr>) -> Self {
+  pub fn new(params: &PoseidonConfig<Fr>) -> Self {
     let sponge = PoseidonSponge::new(params);
     PoseidonTranscript {
       sponge,
@@ -73,9 +75,9 @@ impl PoseidonTranscript {
     }
   }
 
-  pub fn append_gt(&mut self, g_t: &<I as PairingEngine>::Fqk) {
+  pub fn append_gt(&mut self, g_t: &<I as Pairing>::TargetField) {
     let mut bytes = Vec::new();
-    g_t.serialize(&mut bytes).unwrap();
+    g_t.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
     self.append_bytes(&bytes);
   }
 
@@ -101,7 +103,7 @@ impl AppendToPoseidon for CompressedGroup {
 impl AppendToPoseidon for Commitment<I> {
   fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
     let mut bytes = Vec::new();
-    self.serialize(&mut bytes).unwrap();
+    self.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
     transcript.append_bytes(&bytes);
   }
 }
@@ -109,7 +111,7 @@ impl AppendToPoseidon for Commitment<I> {
 impl AppendToPoseidon for G1Affine {
   fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
     let mut bytes = Vec::new();
-    self.serialize(&mut bytes).unwrap();
+    self.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
     transcript.append_bytes(&bytes);
   }
 }
