@@ -121,7 +121,8 @@ impl<E: PairingEngine> MippProof<E> {
     let final_a = m_a[0];
     let final_h = m_h[0];
 
-    // get polynomial f_h
+    // get the structured polynomial f_h for which final_h = h^f_h(vec{t})
+    // is the PST commitment given generator h and toxic waste t
     let poly = DenseMultilinearExtension::<E::Fr>::from_evaluations_vec(
       xs_inv.len(),
       Self::polynomial_evaluations_from_transcript::<E::Fr>(&xs_inv),
@@ -129,38 +130,39 @@ impl<E: PairingEngine> MippProof<E> {
     let c = MultilinearPC::<E>::commit_g2(ck, &poly);
     debug_assert!(c.h_product == final_h);
 
-    // create proof that final_h is well-formed
-    let mut point: Vec<E::Fr> = (0..poly.num_vars)
+    // generate a proof of opening final_h at a random  point
+    let rs: Vec<E::Fr> = (0..poly.num_vars)
       .into_iter()
       .map(|_| transcript.challenge_scalar::<E::Fr>(b"random_point"))
       .collect();
 
-    let pst_proof_h = MultilinearPC::<E>::open_g1(ck, &poly, &point);
+    let pst_proof_h = MultilinearPC::<E>::open_g1(ck, &poly, &rs);
 
-    // println!("PROVER: last challenge {}", xs.last().unwrap());
-    // println!("PROVER: last y {}", m_y.last().unwrap());
-    // println!("PROVER: last final c {:?}", m_a.last().unwrap());
-
-    Ok(
-      (MippProof {
-        comms_t,
-        comms_u,
-        final_a,
-        final_h,
-        pst_proof_h,
-      }),
-    )
+    Ok(MippProof {
+      comms_t,
+      comms_u,
+      final_a,
+      final_h,
+      pst_proof_h,
+    })
   }
 
+  // builds the polynomial f_h in Lagrange basis which uses the
+  // inverses of transcript challenges this is the following
+  // structured polynomial $\prod_i(1 - z_i + cs_inv[m - i  - 1] * z_i)$
+  // where m is the length of cs_inv and z_i is the unknown
   fn polynomial_evaluations_from_transcript<F: Field>(cs_inv: &[F]) -> Vec<F> {
     let m = cs_inv.len();
     let pow_m = 2_usize.pow(m as u32);
 
+    // Constructs the list of evaluations over the boolean hypercube
     let evals = (0..pow_m)
       .into_par_iter()
       .map(|i| {
         let mut res = F::one();
         for j in 0..m {
+          // We iterate (m - 1)th bit to 0th bit and, in case the bit is 1
+          // we multiply by the corresponding challenge.
           if (i >> j) & 1 == 1 {
             res *= cs_inv[m - j - 1];
           }
@@ -204,17 +206,24 @@ impl<E: PairingEngine> MippProof<E> {
       transcript.append(b"comm_u_r", comm_u_r);
       transcript.append(b"comm_t_l", comm_t_l);
       transcript.append(b"comm_t_r", comm_t_r);
-      let c_inv = transcript.challenge_scalar::<E::Fr>(b"challenge_i");
 
+      let c_inv = transcript.challenge_scalar::<E::Fr>(b"challenge_i");
       let c = c_inv.inverse().unwrap();
+
       xs.push(c);
       xs_inv.push(c_inv);
 
       // the verifier computes the final_y by themselves given
-      // it's field operations it is quite fast and parallelisation
+      // it's field operations so quite fast and parallelisation
       // doesn't bring much improvement
+      // TODO: look into alternatives
       final_y *= E::Fr::one() + c_inv.mul(point[i]) - point[i];
     }
+
+    // First, each entry of T and U are multiplied independently by their
+    // respective challenges which is done in parralel and, at the end,
+    // the results are merged together for each vector following their
+    // corresponding merge operation.
     enum Op<'a, E: PairingEngine> {
       TC(&'a E::Fqk, <E::Fr as PrimeField>::BigInt),
       UC(&'a E::G1Affine, <E::Fr as PrimeField>::BigInt),
@@ -257,26 +266,30 @@ impl<E: PairingEngine> MippProof<E> {
         acc_res
       });
 
-    // the initial values of T and U are merged to get the final result
+    // the initial values of T and U are also merged to get the final result
     let ref_final_res = &mut final_res;
     ref_final_res.merge(&res);
 
-    let mut point: Vec<E::Fr> = Vec::new();
+    let mut rs: Vec<E::Fr> = Vec::new();
     let m = xs_inv.len();
     for i in 0..m {
-      let r = transcript.challenge_scalar::<E::Fr>(b"random_point");
-      point.push(r);
+      let r = transcript.challenge_scalar::<E::Fr>(b"random_rs");
+      rs.push(r);
     }
+
+    // Given f_h is structured, the verifier can compute it's evaluation at
+    // the random point point in O(m) time by themselves and use a PST
+    // verification to ensure final_h is well formed.
     let v = (0..m)
       .into_par_iter()
-      .map(|i| E::Fr::one() + point[i].mul(xs_inv[m - i - 1]) - point[i])
+      .map(|i| E::Fr::one() + rs[i].mul(xs_inv[m - i - 1]) - rs[i])
       .product();
 
     let comm_h = Commitment_G2 {
       nv: m,
       h_product: proof.final_h,
     };
-    let check_h = MultilinearPC::<E>::check_2(vk, &comm_h, &point, v, &proof.pst_proof_h);
+    let check_h = MultilinearPC::<E>::check_2(vk, &comm_h, &rs, v, &proof.pst_proof_h);
 
     let final_u = proof.final_a.mul(final_y);
     let final_t: <E as PairingEngine>::Fqk = E::pairing(proof.final_a, proof.final_h);
@@ -318,9 +331,9 @@ where
   }
 }
 
-/// compress is similar to commit::{V,W}KEY::compress: it modifies the `vec`
-/// vector by setting the value at index $i:0 -> split$  $vec[i] = vec[i] +
-/// vec[i+split]^scaler$. The `vec` vector is half of its size after this call.
+/// compress modifies the `vec` vector by setting the value at
+/// index $i:0 -> split$  $vec[i] = vec[i] + vec[i+split]^scaler$.
+/// The `vec` vector is half of its size after this call.
 pub fn compress<C: AffineCurve>(vec: &mut Vec<C>, split: usize, scaler: &C::ScalarField) {
   let (left, right) = vec.split_at_mut(split);
   left

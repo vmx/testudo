@@ -45,6 +45,8 @@ impl Polynomial {
       .map(|i| {
         let z: Vec<Scalar> = (0..pow_m)
           .into_par_iter()
+          // viewing the list of evaluation as a square matrix
+          // we select by row i and column j
           .map(|j| Z[(j << m) | i])
           .collect();
         DensePolynomial::new(z)
@@ -139,11 +141,13 @@ impl Polynomial {
     (comm_list, t)
   }
 
+  // computes \chi_i(\vec{b}) = \prod_{i_j = 0}(1 - b_j)\prod_{i_j = 1}(b_j)
   pub fn get_chi_i(b: &[Scalar], i: usize) -> Scalar {
     let m = b.len();
     let mut prod = Scalar::one();
     for j in 0..m {
       let b_j = b[j];
+      // iterate from msb to lsb of i to build chi_i as defined above
       if i >> (m - j - 1) & 1 == 1 {
         prod = prod * b_j;
       } else {
@@ -163,13 +167,6 @@ impl Polynomial {
   ) -> (Commitment<I>, Proof<I>, MippProof<I>) {
     let m = point.len() / 2;
     let a = &point[0..m];
-
-    if self.q.is_none() {
-      self.get_q(point);
-    }
-
-    let q = self.q.clone().unwrap();
-
     if self.q.is_none() {
       self.get_q(point);
     }
@@ -204,18 +201,19 @@ impl Polynomial {
     debug_assert!(c_u == comm.g_product);
     let h_vec = ck.powers_of_h[0].clone();
 
-    // MIPP proof that U is the inner product of the vector A
-    //  and the vector y, where A is the opening vector to T
+    // construct MIPP proof that U is the inner product of the vector A
+    // and the vector y, where A is the opening vector to T
     let timer_mipp_proof = Timer::new("mipp_prove");
     let mipp_proof =
       MippProof::<I>::prove::<PoseidonTranscript>(transcript, ck, a_vec, chis, h_vec, &c_u, t)
         .unwrap();
     timer_mipp_proof.stop();
 
-    // PST proof for opening q at a
     let timer_proof = Timer::new("pst_open");
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
+
+    // construct PST proof for opening q at a
     let pst_proof = MultilinearPC::<I>::open(ck, &q, &a_rev);
     timer_proof.stop();
 
@@ -236,7 +234,9 @@ impl Polynomial {
     let len = point.len();
     let a = &point[0..len / 2];
     let b = &point[len / 2..len];
+
     let timer_mipp_verify = Timer::new("mipp_verify");
+    // verify that U = A^y where A is the opening vector of T
     let res_mipp = MippProof::<I>::verify::<PoseidonTranscript>(
       vk,
       transcript,
@@ -251,6 +251,8 @@ impl Polynomial {
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
     let timer_pst_verify = Timer::new("pst_verify");
+
+    // verify that q(a) is indeed v
     let res = MultilinearPC::<I>::check(vk, U, &a_rev, v, pst_proof);
     timer_pst_verify.stop();
     res

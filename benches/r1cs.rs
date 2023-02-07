@@ -11,7 +11,6 @@ struct BenchmarkResults {
   power: usize,
   input_constraints: usize,
   spartan_verifier_circuit_constraints: usize,
-  r1cs_instance_generation_time: u128,
   spartan_proving_time: u128,
   groth16_setup_time: u128,
   groth16_proving_time: u128,
@@ -21,13 +20,7 @@ struct BenchmarkResults {
 
 fn main() {
   let mut writer = csv::Writer::from_path("testudo.csv").expect("unable to open csv writer");
-  // for &s in [
-  //   10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-  // ]
-  // .iter()
-  // For testing purposes we currently bench on very small instance to ensure
-  // correctness and then on biggest one for timings.
-  for &s in [4, 26].iter() {
+  for &s in [10, 12, 14, 16, 18, 20, 22, 24, 26].iter() {
     println!("Running for {} inputs", s);
     let mut br = BenchmarkResults::default();
     let num_vars = (2_usize).pow(s as u32);
@@ -39,7 +32,6 @@ fn main() {
     let start = Instant::now();
     let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
     let duration = start.elapsed().as_millis();
-    br.r1cs_instance_generation_time = duration;
     let mut prover_transcript = PoseidonTranscript::new(&POSEIDON_PARAMETERS_FR_377);
 
     let gens = NIZKGens::new(num_cons, num_vars, num_inputs);
