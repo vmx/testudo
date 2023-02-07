@@ -30,8 +30,7 @@ impl<G: CurveGroup> MultiCommitGens<G> {
           let uniform_bytes = sponge.squeeze_bytes(64);
           el_aff = GroupElementAffine::from_random_bytes(&uniform_bytes);
         }
-        let el = el_aff.unwrap().clear_cofactor();
-        gens.push(el);
+        el_aff.unwrap().clear_cofactor()
       })
       .collect::<Vec<_>>();
 

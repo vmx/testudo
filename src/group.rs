@@ -1,7 +1,7 @@
 use crate::errors::ProofVerifyError;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::Group;
-use ark_ff::PrimeField;
+
 use lazy_static::lazy_static;
 
 use super::scalar::Scalar;

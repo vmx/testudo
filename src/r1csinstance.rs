@@ -1,5 +1,4 @@
 use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
-use crate::transcript::AppendToTranscript;
 
 use super::dense_mlpoly::DensePolynomial;
 use super::errors::ProofVerifyError;
@@ -15,8 +14,6 @@ use ark_ff::Field;
 use ark_serialize::*;
 use ark_std::{One, UniformRand, Zero};
 use digest::{ExtendableOutput, Input};
-
-use merlin::Transcript;
 use sha3::Shake256;
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
@@ -56,15 +53,6 @@ pub struct R1CSCommitment {
   num_vars: usize,
   num_inputs: usize,
   comm: SparseMatPolyCommitment,
-}
-
-impl AppendToTranscript for R1CSCommitment {
-  fn append_to_transcript(&self, _label: &'static [u8], transcript: &mut Transcript) {
-    transcript.append_u64(b"num_cons", self.num_cons as u64);
-    transcript.append_u64(b"num_vars", self.num_vars as u64);
-    transcript.append_u64(b"num_inputs", self.num_inputs as u64);
-    self.comm.append_to_transcript(b"comm", transcript);
-  }
 }
 
 impl AppendToPoseidon for R1CSCommitment {

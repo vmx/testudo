@@ -1,34 +1,30 @@
-use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
-
-use super::commitments::{Commitments, MultiCommitGens};
-use super::group::GroupElement;
 use super::scalar::Scalar;
-use super::transcript::{AppendToTranscript, ProofTranscript};
-use ark_ff::Field;
+use crate::poseidon_transcript::PoseidonTranscript;
+use crate::transcript::{Transcript, TranscriptWriter};
+use ark_ff::{Field, PrimeField};
 use ark_serialize::*;
-use merlin::Transcript;
 // ax^2 + bx + c stored as vec![c,b,a]
 // ax^3 + bx^2 + cx + d stored as vec![d,c,b,a]
 #[derive(Debug, CanonicalDeserialize, CanonicalSerialize, Clone)]
-pub struct UniPoly {
-  pub coeffs: Vec<Scalar>,
+pub struct UniPoly<F: Field> {
+  pub coeffs: Vec<F>,
   // pub coeffs_fq: Vec<Fq>,
 }
 
 // ax^2 + bx + c stored as vec![c,a]
 // ax^3 + bx^2 + cx + d stored as vec![d,b,a]
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
-pub struct CompressedUniPoly {
-  pub coeffs_except_linear_term: Vec<Scalar>,
+pub struct CompressedUniPoly<F: Field> {
+  pub coeffs_except_linear_term: Vec<F>,
 }
 
-impl UniPoly {
-  pub fn from_evals(evals: &[Scalar]) -> Self {
+impl<F: Field> UniPoly<F> {
+  pub fn from_evals(evals: &[F]) -> Self {
     // we only support degree-2 or degree-3 univariate polynomials
     assert!(evals.len() == 3 || evals.len() == 4);
     let coeffs = if evals.len() == 3 {
       // ax^2 + bx + c
-      let two_inv = Scalar::from(2).inverse().unwrap();
+      let two_inv = F::from(2).inverse().unwrap();
 
       let c = evals[0];
       let a = two_inv * (evals[2] - evals[1] - evals[1] + c);
@@ -36,8 +32,8 @@ impl UniPoly {
       vec![c, b, a]
     } else {
       // ax^3 + bx^2 + cx + d
-      let two_inv = Scalar::from(2).inverse().unwrap();
-      let six_inv = Scalar::from(6).inverse().unwrap();
+      let two_inv = F::from(2).inverse().unwrap();
+      let six_inv = F::from(6).inverse().unwrap();
 
       let d = evals[0];
       let a = six_inv
@@ -60,19 +56,15 @@ impl UniPoly {
     self.coeffs.len() - 1
   }
 
-  pub fn as_vec(&self) -> Vec<Scalar> {
-    self.coeffs.clone()
-  }
-
-  pub fn eval_at_zero(&self) -> Scalar {
+  pub fn eval_at_zero(&self) -> F {
     self.coeffs[0]
   }
 
-  pub fn eval_at_one(&self) -> Scalar {
+  pub fn eval_at_one(&self) -> F {
     (0..self.coeffs.len()).map(|i| self.coeffs[i]).sum()
   }
 
-  pub fn evaluate(&self, r: &Scalar) -> Scalar {
+  pub fn evaluate(&self, r: &F) -> F {
     let mut eval = self.coeffs[0];
     let mut power = *r;
     for i in 1..self.coeffs.len() {
@@ -89,16 +81,12 @@ impl UniPoly {
       coeffs_except_linear_term,
     }
   }
-
-  pub fn commit(&self, gens: &MultiCommitGens, blind: &Scalar) -> GroupElement {
-    self.coeffs.commit(blind, gens)
-  }
 }
 
-impl CompressedUniPoly {
+impl<F: PrimeField> CompressedUniPoly<F> {
   // we require eval(0) + eval(1) = hint, so we can solve for the linear term as:
   // linear_term = hint - 2 * constant_term - deg2 term - deg3 term
-  pub fn decompress(&self, hint: &Scalar) -> UniPoly {
+  pub fn decompress(&self, hint: &F) -> UniPoly<F> {
     let mut linear_term =
       (*hint) - self.coeffs_except_linear_term[0] - self.coeffs_except_linear_term[0];
     for i in 1..self.coeffs_except_linear_term.len() {
@@ -112,23 +100,13 @@ impl CompressedUniPoly {
   }
 }
 
-impl AppendToPoseidon for UniPoly {
-  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
+impl<F: PrimeField> TranscriptWriter for UniPoly<F> {
+  fn write_to_transcript(&self, transcript: &mut impl Transcript) {
     // transcript.append_message(label, b"UniPoly_begin");
     for i in 0..self.coeffs.len() {
-      transcript.append_scalar(&self.coeffs[i]);
+      transcript.append(&self.coeffs[i],"coeffs");
     }
     // transcript.append_message(label, b"UniPoly_end");
-  }
-}
-
-impl AppendToTranscript for UniPoly {
-  fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
-    transcript.append_message(label, b"UniPoly_begin");
-    for i in 0..self.coeffs.len() {
-      transcript.append_scalar(b"coeff", &self.coeffs[i]);
-    }
-    transcript.append_message(label, b"UniPoly_end");
   }
 }
 
