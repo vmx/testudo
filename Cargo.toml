@@ -42,7 +42,6 @@ ark-groth16 = { version = "^0.3.0", features = ["r1cs"] }
 ark-bw6-761 = { version = "^0.3.0" }
 ark-poly-commit = { version = "^0.3.0" }
 ark-poly = {version = "^0.3.0"}
-snarkpack = { path="../snarkpack"}
 
 
 lazy_static = "1.4.0"

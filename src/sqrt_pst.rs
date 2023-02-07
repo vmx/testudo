@@ -1,3 +1,4 @@
+use crate::mipp::MippProof;
 use ark_bls12_377::{Bls12_377 as I, G1Affine, G2Affine};
 use ark_ec::{msm::VariableBaseMSM, PairingEngine, ProjectiveCurve};
 use ark_ff::{BigInteger256, One, PrimeField};
@@ -9,7 +10,6 @@ use ark_serialize::CanonicalSerialize;
 use rayon::prelude::{
   IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
-use snarkpack::mipp::MippProof;
 
 use super::scalar::Scalar;
 use crate::{

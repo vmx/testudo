@@ -1,3 +1,4 @@
+/// Timer is a simple utility to profile the execution time of a block of code.
 #[cfg(feature = "profile")]
 use colored::Colorize;
 #[cfg(feature = "profile")]
