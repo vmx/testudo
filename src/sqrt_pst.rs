@@ -62,7 +62,7 @@ impl Polynomial {
 
   // Given point = (\vec{a}, \vec{b}), compute the polynomial q as
   // q(Y) =
-  // \sum_{j \in \{0,1\}^m}(\sum_{i \in \{0,1\}^m} p(j,i) * chi_i(a)) * chi_j(Y)
+  // \sum_{j \in \{0,1\}^m}(\sum_{i \in \{0,1\}^m} p(j,i) * chi_i(b)) * chi_j(Y)
   // and p(a,b) = q(b) where p is the initial polynomial
   fn get_q(&mut self, point: &[Scalar]) {
     let q_timer = Timer::new("build_q");
@@ -163,7 +163,12 @@ impl Polynomial {
   ) -> (Commitment<I>, Proof<I>, MippProof<I>) {
     let m = point.len() / 2;
     let a = &point[0..m];
-    let b = &point[m..2 * m];
+
+    if self.q.is_none() {
+      self.get_q(point);
+    }
+
+    let q = self.q.clone().unwrap();
 
     if self.q.is_none() {
       self.get_q(point);
@@ -207,7 +212,7 @@ impl Polynomial {
         .unwrap();
     timer_mipp_proof.stop();
 
-    // PST proof for opening q at b
+    // PST proof for opening q at a
     let timer_proof = Timer::new("pst_open");
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
@@ -215,8 +220,6 @@ impl Polynomial {
     timer_proof.stop();
 
     timer_open.stop();
-
-    // TODO: add MIPP proof as return value
     (U, pst_proof, mipp_proof)
   }
 
