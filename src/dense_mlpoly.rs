@@ -2,7 +2,6 @@
 
 use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
 
-
 use super::commitments::{Commitments, MultiCommitGens};
 use super::errors::ProofVerifyError;
 use super::group::{
@@ -14,6 +13,7 @@ use super::nizk::{DotProductProofGens, DotProductProofLog};
 use super::random::RandomTape;
 use super::scalar::Scalar;
 use super::transcript::{AppendToTranscript, ProofTranscript};
+<<<<<<< Updated upstream
 use ark_bls12_377::{Bls12_377 as I, G1Affine};
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::{pairing::Pairing, CurveGroup};
@@ -22,6 +22,13 @@ use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
 use ark_poly_commit::multilinear_pc::data_structures::{
   Commitment, CommitterKey, Proof, UniversalParams, VerifierKey,
 };
+=======
+use ark_bls12_377::Bls12_377 as I;
+use ark_ff::Field;
+use ark_ff::{One, UniformRand, Zero};
+use ark_poly::MultilinearExtension;
+use ark_poly_commit::multilinear_pc::data_structures::{CommitterKey, VerifierKey};
+>>>>>>> Stashed changes
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::*;
 use core::ops::Index;
@@ -33,18 +40,18 @@ use rayon::prelude::*;
 
 // TODO: integrate the DenseMultilinearExtension(and Sparse) https://github.com/arkworks-rs/algebra/tree/master/poly/src/evaluations/multivariate/multilinear from arkworks into Spartan. This requires moving the specific Spartan functionalities in separate traits.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, CanonicalDeserialize, CanonicalSerialize)]
-pub struct DensePolynomial {
+pub struct DensePolynomial<F: Field> {
   pub num_vars: usize, // the number of variables in the multilinear polynomial
   pub len: usize,
-  pub Z: Vec<Scalar>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
+  pub Z: Vec<F>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
 }
 
-impl MultilinearExtension<Scalar> for DensePolynomial {
+impl<F: Field> MultilinearExtension<F> for DensePolynomial<F> {
   fn num_vars(&self) -> usize {
     self.get_num_vars()
   }
 
-  fn evaluate(&self, point: &[Scalar]) -> Option<Scalar> {
+  fn evaluate(&self, point: &[F]) -> Option<F> {
     if point.len() == self.num_vars {
       Some(self.evaluate(&point))
     } else {
@@ -53,9 +60,9 @@ impl MultilinearExtension<Scalar> for DensePolynomial {
   }
 
   fn rand<R: rand::Rng>(num_vars: usize, rng: &mut R) -> Self {
-    let evals = (0..(1 << num_vars)).map(|_| Scalar::rand(rng)).collect();
+    let evals = (0..(1 << num_vars)).map(|_| F::rand(rng)).collect();
     Self {
-      num_vars: num_vars,
+      num_vars,
       len: 1 << num_vars,
       Z: evals,
     }
@@ -74,12 +81,12 @@ impl MultilinearExtension<Scalar> for DensePolynomial {
   }
 }
 
-impl Zero for DensePolynomial {
+impl<F: Field> Zero for DensePolynomial<F> {
   fn zero() -> Self {
     Self {
       num_vars: 0,
       len: 1,
-      Z: vec![Scalar::zero()],
+      Z: vec![F::zero()],
     }
   }
 
@@ -88,8 +95,8 @@ impl Zero for DensePolynomial {
   }
 }
 
-impl Add for DensePolynomial {
-  type Output = DensePolynomial;
+impl<F: Field> Add for DensePolynomial<F> {
+  type Output = DensePolynomial<F>;
   fn add(self, other: Self) -> Self {
     &self + &other
   }
@@ -97,10 +104,10 @@ impl Add for DensePolynomial {
 
 // function needed because the result might have a different lifetime than the
 // operands
-impl<'a, 'b> Add<&'a DensePolynomial> for &'b DensePolynomial {
-  type Output = DensePolynomial;
+impl<'a, 'b, F: Field> Add<&'a DensePolynomial<F>> for &'b DensePolynomial<F> {
+  type Output = DensePolynomial<F>;
 
-  fn add(self, other: &'a DensePolynomial) -> Self::Output {
+  fn add(self, other: &'a DensePolynomial<F>) -> Self::Output {
     if other.is_zero() {
       return self.clone();
     }
@@ -109,7 +116,7 @@ impl<'a, 'b> Add<&'a DensePolynomial> for &'b DensePolynomial {
     }
     assert_eq!(self.num_vars, other.num_vars);
 
-    let res: Vec<Scalar> = self
+    let res = self
       .Z
       .iter()
       .zip(other.Z.iter())
@@ -123,20 +130,20 @@ impl<'a, 'b> Add<&'a DensePolynomial> for &'b DensePolynomial {
   }
 }
 
-impl AddAssign for DensePolynomial {
+impl<F: Field> AddAssign for DensePolynomial<F> {
   fn add_assign(&mut self, other: Self) {
     *self = &*self + &other;
   }
 }
 
-impl<'a, 'b> AddAssign<&'a DensePolynomial> for DensePolynomial {
-  fn add_assign(&mut self, other: &'a DensePolynomial) {
+impl<'a, 'b, F: Field> AddAssign<&'a DensePolynomial<F>> for DensePolynomial<F> {
+  fn add_assign(&mut self, other: &'a DensePolynomial<F>) {
     *self = &*self + other;
   }
 }
 
-impl<'a, 'b> AddAssign<(Scalar, &'a DensePolynomial)> for DensePolynomial {
-  fn add_assign(&mut self, (scalar, other): (Scalar, &'a DensePolynomial)) {
+impl<'a, 'b, F: Field> AddAssign<(Scalar, &'a DensePolynomial<F>)> for DensePolynomial<F> {
+  fn add_assign(&mut self, (scalar, other): (Scalar, &'a DensePolynomial<F>)) {
     let other = Self {
       num_vars: other.num_vars,
       len: 1 << other.num_vars,
@@ -146,8 +153,8 @@ impl<'a, 'b> AddAssign<(Scalar, &'a DensePolynomial)> for DensePolynomial {
   }
 }
 
-impl Neg for DensePolynomial {
-  type Output = DensePolynomial;
+impl<F: Field> Neg for DensePolynomial<F> {
+  type Output = DensePolynomial<F>;
 
   fn neg(self) -> Self::Output {
     Self::Output {
@@ -158,39 +165,39 @@ impl Neg for DensePolynomial {
   }
 }
 
-impl Sub for DensePolynomial {
-  type Output = DensePolynomial;
+impl<F:Field> Sub for DensePolynomial<F> {
+  type Output = DensePolynomial<F>;
 
   fn sub(self, other: Self) -> Self::Output {
     &self - &other
   }
 }
 
-impl<'a, 'b> Sub<&'a DensePolynomial> for &'b DensePolynomial {
-  type Output = DensePolynomial;
+impl<'a, 'b,F:Field> Sub<&'a DensePolynomial<F>> for &'b DensePolynomial<F> {
+  type Output = DensePolynomial<F>;
 
-  fn sub(self, other: &'a DensePolynomial) -> Self::Output {
+  fn sub(self, other: &'a DensePolynomial<F>) -> Self::Output {
     self + &other.clone().neg()
   }
 }
 
-impl SubAssign for DensePolynomial {
+impl<F:Field> SubAssign for DensePolynomial<F> {
   fn sub_assign(&mut self, other: Self) {
     *self = &*self - &other;
   }
 }
 
-impl<'a, 'b> SubAssign<&'a DensePolynomial> for DensePolynomial {
-  fn sub_assign(&mut self, other: &'a DensePolynomial) {
+impl<'a, 'b,F:Field> SubAssign<&'a DensePolynomial<F>> for DensePolynomial<F> {
+  fn sub_assign(&mut self, other: &'a DensePolynomial<F>) {
     *self = &*self - other;
   }
 }
 
 #[derive(Clone)]
-pub struct PolyCommitmentGens {
+pub struct PolyCommitmentGens<E: Pairing>{
   pub gens: DotProductProofGens,
-  pub ck: CommitterKey<I>,
-  pub vk: VerifierKey<I>,
+  pub ck: CommitterKey<E>,
+  pub vk: VerifierKey<E>,
 }
 
 impl PolyCommitmentGens {
@@ -593,7 +600,6 @@ impl PolyEvalProof {
 
 #[cfg(test)]
 mod tests {
-  
 
   use crate::parameters::poseidon_params;
 

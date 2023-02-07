@@ -419,15 +419,15 @@ impl DotProductProof {
 }
 
 #[derive(Clone)]
-pub struct DotProductProofGens {
+pub struct DotProductProofGens<G: CurveGroup> {
   n: usize,
-  pub gens_n: MultiCommitGens,
-  pub gens_1: MultiCommitGens,
+  pub gens_n: MultiCommitGens<G>,
+  pub gens_1: MultiCommitGens<G>,
 }
 
-impl DotProductProofGens {
+impl<G: CurveGroup> DotProductProofGens<G> {
   pub fn new(n: usize, label: &[u8]) -> Self {
-    let (gens_n, gens_1) = MultiCommitGens::new(n + 1, label).split_at(n);
+    let (gens_n, gens_1) = MultiCommitGens::<G>::new(n + 1, label).split_at(n);
     DotProductProofGens { n, gens_n, gens_1 }
   }
 }
@@ -574,9 +574,8 @@ impl DotProductProofLog {
     let z2_s = &self.z2;
 
     let lhs = ((Gamma_hat.mul(c_s) + beta_s).mul(a_hat_s) + delta_s).compress();
-    let rhs = ((g_hat + gens.gens_1.G[0].mul(a_hat_s)).mul(z1_s)
-      + gens.gens_1.h.mul(z2_s))
-    .compress();
+    let rhs =
+      ((g_hat + gens.gens_1.G[0].mul(a_hat_s)).mul(z1_s) + gens.gens_1.h.mul(z2_s)).compress();
 
     assert_eq!(lhs, rhs);
 
