@@ -1,15 +1,15 @@
-use super::macros::*;
+
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::CurveGroup;
 use ark_ec::{pairing::Pairing, AffineRepr};
-use ark_ff::{BigInt, Field, PrimeField};
+use ark_ff::{Field, PrimeField};
 use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
 use ark_poly_commit::multilinear_pc::data_structures::{
-  CommitmentG2, CommitterKey, Proof, ProofG1, VerifierKey,
+  CommitmentG2, CommitterKey, ProofG1, VerifierKey,
 };
 use ark_poly_commit::multilinear_pc::MultilinearPC;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
-use ark_std::cfg_iter;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError, Write};
+
 use ark_std::One;
 use ark_std::Zero;
 use rayon::iter::ParallelIterator;
@@ -35,7 +35,7 @@ impl<E: Pairing> MippProof<E> {
     y: Vec<E::ScalarField>,
     h: Vec<E::G2Affine>,
     U: &E::G1Affine,
-    T: &<E as Pairing>::TargetField,
+    _T: &<E as Pairing>::TargetField,
   ) -> Result<MippProof<E>, Error> {
     // the values of vectors A and y rescaled at each step of the loop
     let (mut m_a, mut m_y) = (a.clone(), y.clone());
@@ -266,7 +266,7 @@ impl<E: Pairing> MippProof<E> {
 
     let mut point: Vec<E::ScalarField> = Vec::new();
     let m = xs_inv.len();
-    for i in 0..m {
+    for _i in 0..m {
       let r = transcript.challenge_scalar::<E::ScalarField>(b"random_point");
       point.push(r);
     }

@@ -2,8 +2,8 @@ use super::group::{GroupElement, GroupElementAffine, VartimeMultiscalarMul, GROU
 use super::scalar::Scalar;
 use crate::group::CompressGroupElement;
 use crate::parameters::*;
-use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::PrimeField;
+use ark_ec::{AffineRepr};
+
 use std::ops::Mul;
 
 use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;

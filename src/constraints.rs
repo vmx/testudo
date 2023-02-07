@@ -23,7 +23,7 @@ use ark_crypto_primitives::sponge::{
   constraints::CryptographicSpongeVar,
   poseidon::{constraints::PoseidonSpongeVar, PoseidonConfig},
 };
-use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof, VerifierKey};
+use ark_poly_commit::multilinear_pc::data_structures::{Commitment};
 use ark_r1cs_std::{
   alloc::{AllocVar, AllocationMode},
   fields::fp::FpVar,

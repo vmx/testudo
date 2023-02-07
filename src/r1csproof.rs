@@ -1,5 +1,4 @@
 #![allow(clippy::too_many_arguments)]
-use super::commitments::MultiCommitGens;
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyCommitmentGens};
 use super::errors::ProofVerifyError;
 use crate::constraints::{VerifierCircuit, VerifierConfig};
@@ -13,9 +12,9 @@ use crate::sumcheck::SumcheckInstanceProof;
 use ark_bls12_377::Bls12_377 as I;
 use ark_bw6_761::BW6_761 as P;
 use ark_ec::pairing::Pairing;
-use ark_poly::MultilinearExtension;
+
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
-use ark_poly_commit::multilinear_pc::MultilinearPC;
+
 
 use super::r1csinstance::R1CSInstance;
 
@@ -47,31 +46,9 @@ pub struct R1CSProof {
   pub t: <I as Pairing>::TargetField,
   pub mipp_proof: MippProof<I>,
 }
-#[derive(Clone)]
-pub struct R1CSSumcheckGens {
-  gens_1: MultiCommitGens,
-  gens_3: MultiCommitGens,
-  gens_4: MultiCommitGens,
-}
-
-// TODO: fix passing gens_1_ref
-impl R1CSSumcheckGens {
-  pub fn new(label: &'static [u8], gens_1_ref: &MultiCommitGens) -> Self {
-    let gens_1 = gens_1_ref.clone();
-    let gens_3 = MultiCommitGens::new(3, label);
-    let gens_4 = MultiCommitGens::new(4, label);
-
-    R1CSSumcheckGens {
-      gens_1,
-      gens_3,
-      gens_4,
-    }
-  }
-}
 
 #[derive(Clone)]
 pub struct R1CSGens {
-  gens_sc: R1CSSumcheckGens,
   gens_pc: PolyCommitmentGens,
 }
 
@@ -79,8 +56,7 @@ impl R1CSGens {
   pub fn new(label: &'static [u8], _num_cons: usize, num_vars: usize) -> Self {
     let num_poly_vars = num_vars.log_2();
     let gens_pc = PolyCommitmentGens::new(num_poly_vars, label);
-    let gens_sc = R1CSSumcheckGens::new(label, &gens_pc.gens.gens_1);
-    R1CSGens { gens_sc, gens_pc }
+    R1CSGens { gens_pc }
   }
 }
 
@@ -422,7 +398,7 @@ impl R1CSProof {
       transcript_sat_state: self.transcript_sat_state,
     };
 
-    let mut rng = ark_std::test_rng();
+    let _rng = ark_std::test_rng();
     let circuit = VerifierCircuit::new(&config, &mut rand::thread_rng()).unwrap();
 
     let nc_inner = verify_constraints_inner(circuit.clone(), &num_cons);

@@ -2,7 +2,6 @@
 
 use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
 
-
 use super::commitments::{Commitments, MultiCommitGens};
 use super::errors::ProofVerifyError;
 use super::group::{
@@ -13,19 +12,13 @@ use super::math::Math;
 use super::nizk::{DotProductProofGens, DotProductProofLog};
 use super::random::RandomTape;
 use super::scalar::Scalar;
-use super::transcript::{AppendToTranscript, ProofTranscript};
-use ark_bls12_377::{Bls12_377 as I, G1Affine};
-use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
-use ark_ec::{pairing::Pairing, CurveGroup};
-use ark_ff::{One, PrimeField, UniformRand, Zero};
-use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
-use ark_poly_commit::multilinear_pc::data_structures::{
-  Commitment, CommitterKey, Proof, UniversalParams, VerifierKey,
-};
+use ark_bls12_377::Bls12_377 as I;
+use ark_ff::{One, UniformRand, Zero};
+use ark_poly::MultilinearExtension;
+use ark_poly_commit::multilinear_pc::data_structures::{CommitterKey, VerifierKey};
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::*;
 use core::ops::Index;
-use merlin::Transcript;
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 #[cfg(feature = "multicore")]
@@ -465,16 +458,6 @@ impl Index<usize> for DensePolynomial {
   }
 }
 
-impl AppendToTranscript for PolyCommitment {
-  fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
-    transcript.append_message(label, b"poly_commitment_begin");
-    for i in 0..self.C.len() {
-      transcript.append_point(b"poly_commitment_share", &self.C[i]);
-    }
-    transcript.append_message(label, b"poly_commitment_end");
-  }
-}
-
 impl AppendToPoseidon for PolyCommitment {
   fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
     for i in 0..self.C.len() {
@@ -593,7 +576,6 @@ impl PolyEvalProof {
 
 #[cfg(test)]
 mod tests {
-  
 
   use crate::parameters::poseidon_params;
 

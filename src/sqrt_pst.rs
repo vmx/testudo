@@ -1,7 +1,7 @@
 use crate::mipp::MippProof;
-use ark_bls12_377::{Bls12_377 as I, G1Affine, G1Projective as G1, G2Affine, G2Projective as G2};
+use ark_bls12_377::{Bls12_377 as I, G1Projective as G1};
 use ark_ec::{pairing::Pairing, scalar_mul::variable_base::VariableBaseMSM, CurveGroup};
-use ark_ff::{BigInteger256, One, PrimeField};
+use ark_ff::{One};
 use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
