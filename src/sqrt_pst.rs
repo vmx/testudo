@@ -1,12 +1,12 @@
 use crate::mipp::MippProof;
-use ark_bls12_377::{Bls12_377 as I, G1Affine, G2Affine};
+use ark_bls12_377::{Bls12_377 as I};
 use ark_ec::{msm::VariableBaseMSM, PairingEngine, ProjectiveCurve};
 use ark_ff::{BigInteger256, One, PrimeField};
 use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
 };
-use ark_serialize::CanonicalSerialize;
+
 use rayon::prelude::{
   IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -15,9 +15,8 @@ use super::scalar::Scalar;
 use crate::{
   dense_mlpoly::DensePolynomial,
   math::Math,
-  poseidon_transcript::{AppendToPoseidon, PoseidonTranscript},
+  poseidon_transcript::{PoseidonTranscript},
   timer::Timer,
-  transcript,
 };
 
 pub struct Polynomial {
@@ -69,7 +68,7 @@ impl Polynomial {
   fn get_q(&mut self, point: &[Scalar]) {
     let q_timer = Timer::new("build_q");
     debug_assert!(point.len() == 2 * self.m);
-    let a = &point[0..self.m];
+    let _a = &point[0..self.m];
     let b = &point[self.m..2 * self.m];
     let pow_m = 2_usize.pow(self.m as u32);
 
@@ -92,7 +91,7 @@ impl Polynomial {
   // compute q(b) = p(a,b).
   pub fn eval(&mut self, point: &[Scalar]) -> Scalar {
     let a = &point[0..point.len() / 2];
-    let b = &point[point.len() / 2..point.len()];
+    let _b = &point[point.len() / 2..point.len()];
     if self.q.is_none() {
       self.get_q(point);
     }
@@ -178,7 +177,7 @@ impl Polynomial {
     // Compute the PST commitment to q obtained as the inner products of the
     // commitments to the polynomials p_i and chi_i(a) for i ranging over the
     // boolean hypercube of size m.
-    let m = a.len();
+    let _m = a.len();
     let timer_msm = Timer::new("msm");
     if self.chis_b.is_none() {
       panic!("chis(b) should have been computed for q");
@@ -261,12 +260,12 @@ impl Polynomial {
 
 #[cfg(test)]
 mod tests {
-  use std::clone;
+  
 
   use crate::parameters::poseidon_params;
 
   use super::*;
-  use ark_ff::Zero;
+  
   use ark_std::UniformRand;
   #[test]
   fn check_sqrt_poly_eval() {

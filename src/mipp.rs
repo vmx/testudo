@@ -1,11 +1,10 @@
-use super::macros::*;
 use ark_ec::msm::VariableBaseMSM;
 use ark_ec::ProjectiveCurve;
 use ark_ec::{AffineCurve, PairingEngine};
 use ark_ff::{Field, PrimeField};
-use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
+use ark_poly::DenseMultilinearExtension;
 use ark_poly_commit::multilinear_pc::data_structures::{
-  Commitment_G2, CommitterKey, Proof, Proof_G1, VerifierKey,
+  Commitment_G2, CommitterKey, Proof_G1, VerifierKey,
 };
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
@@ -15,7 +14,7 @@ use ark_std::Zero;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use rayon::prelude::*;
-use std::ops::{Add, AddAssign, Mul, MulAssign, SubAssign};
+use std::ops::{AddAssign, Mul, MulAssign};
 use thiserror::Error;
 
 #[derive(Debug, Clone, CanonicalDeserialize, CanonicalSerialize)]
@@ -35,7 +34,7 @@ impl<E: PairingEngine> MippProof<E> {
     y: Vec<E::Fr>,
     h: Vec<E::G2Affine>,
     U: &E::G1Affine,
-    T: &<E as PairingEngine>::Fqk,
+    _T: &<E as PairingEngine>::Fqk,
   ) -> Result<MippProof<E>, Error> {
     // the values of vectors A and y rescaled at each step of the loop
     let (mut m_a, mut m_y) = (a.clone(), y.clone());
@@ -70,7 +69,7 @@ impl<E: PairingEngine> MippProof<E> {
 
       // since we do this in parallel we take reference first so it can be
       // moved within the macro's rayon scope.
-      let (rh_l, rh_r) = (&h_l, &h_r);
+      let (_rh_l, _rh_r) = (&h_l, &h_r);
       let (ra_l, ra_r) = (&a_l, &a_r);
       let (ry_l, ry_r) = (&y_l, &y_r);
       // See section 3.3 for paper version with equivalent names
@@ -272,7 +271,7 @@ impl<E: PairingEngine> MippProof<E> {
 
     let mut rs: Vec<E::Fr> = Vec::new();
     let m = xs_inv.len();
-    for i in 0..m {
+    for _i in 0..m {
       let r = transcript.challenge_scalar::<E::Fr>(b"random_rs");
       rs.push(r);
     }

@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
-use crate::timer::Timer;
+
 
 use super::commitments::{Commitments, MultiCommitGens};
 use super::errors::ProofVerifyError;
@@ -589,7 +589,7 @@ impl PolyEvalProof {
 
 #[cfg(test)]
 mod tests {
-  use std::num;
+  
 
   use crate::parameters::poseidon_params;
 

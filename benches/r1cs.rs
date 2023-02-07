@@ -31,7 +31,7 @@ fn main() {
 
     let start = Instant::now();
     let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
-    let duration = start.elapsed().as_millis();
+    let _duration = start.elapsed().as_millis();
     let mut prover_transcript = PoseidonTranscript::new(&POSEIDON_PARAMETERS_FR_377);
 
     let gens = NIZKGens::new(num_cons, num_vars, num_inputs);

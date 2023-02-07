@@ -7,15 +7,14 @@ use crate::group::{Fq, Fr};
 use crate::math::Math;
 use crate::mipp::MippProof;
 use crate::parameters::poseidon_params;
-use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
+use crate::poseidon_transcript::PoseidonTranscript;
 use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
 use ark_bls12_377::Bls12_377 as I;
 use ark_bw6_761::BW6_761 as P;
 use ark_ec::PairingEngine;
-use ark_poly::MultilinearExtension;
+
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
-use ark_poly_commit::multilinear_pc::MultilinearPC;
 
 use super::r1csinstance::R1CSInstance;
 
