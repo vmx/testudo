@@ -2,11 +2,12 @@ use super::group::{GroupElement, GroupElementAffine, VartimeMultiscalarMul, GROU
 use super::scalar::Scalar;
 use crate::group::CompressGroupElement;
 use crate::parameters::*;
-use ark_ec::{AffineCurve, ProjectiveCurve};
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
+use std::ops::Mul;
 
-use ark_sponge::poseidon::PoseidonSponge;
-use ark_sponge::CryptographicSponge;
+use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
+use ark_crypto_primitives::sponge::CryptographicSponge;
 
 #[derive(Debug, Clone)]
 pub struct MultiCommitGens {
@@ -29,7 +30,7 @@ impl MultiCommitGens {
         let uniform_bytes = sponge.squeeze_bytes(64);
         el_aff = GroupElementAffine::from_random_bytes(&uniform_bytes);
       }
-      let el = el_aff.unwrap().mul_by_cofactor_to_projective();
+      let el = el_aff.unwrap().clear_cofactor().into_group();
       gens.push(el);
     }
 
@@ -80,13 +81,13 @@ impl Commitments for Scalar {
 impl Commitments for Vec<Scalar> {
   fn commit(&self, blind: &Scalar, gens_n: &MultiCommitGens) -> GroupElement {
     assert_eq!(gens_n.n, self.len());
-    GroupElement::vartime_multiscalar_mul(self, &gens_n.G) + gens_n.h.mul(blind.into_repr())
+    GroupElement::vartime_multiscalar_mul(self, &gens_n.G) + gens_n.h.mul(blind)
   }
 }
 
 impl Commitments for [Scalar] {
   fn commit(&self, blind: &Scalar, gens_n: &MultiCommitGens) -> GroupElement {
     assert_eq!(gens_n.n, self.len());
-    GroupElement::vartime_multiscalar_mul(self, &gens_n.G) + gens_n.h.mul(blind.into_repr())
+    GroupElement::vartime_multiscalar_mul(self, &gens_n.G) + gens_n.h.mul(blind)
   }
 }

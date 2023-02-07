@@ -14,10 +14,14 @@ use super::nizk::{DotProductProofGens, DotProductProofLog};
 use super::random::RandomTape;
 use super::scalar::Scalar;
 use super::transcript::{AppendToTranscript, ProofTranscript};
-use ark_bls12_377::Bls12_377 as I;
-use ark_ff::{One, UniformRand, Zero};
-use ark_poly::MultilinearExtension;
-use ark_poly_commit::multilinear_pc::data_structures::{CommitterKey, VerifierKey};
+use ark_bls12_377::{Bls12_377 as I, G1Affine};
+use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
+use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ff::{One, PrimeField, UniformRand, Zero};
+use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
+use ark_poly_commit::multilinear_pc::data_structures::{
+  Commitment, CommitterKey, Proof, UniversalParams, VerifierKey,
+};
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::*;
 use core::ops::Index;

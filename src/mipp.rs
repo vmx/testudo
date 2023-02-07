@@ -1,10 +1,11 @@
-use ark_ec::msm::VariableBaseMSM;
-use ark_ec::ProjectiveCurve;
-use ark_ec::{AffineCurve, PairingEngine};
-use ark_ff::{Field, PrimeField};
-use ark_poly::DenseMultilinearExtension;
+use super::macros::*;
+use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
+use ark_ec::CurveGroup;
+use ark_ec::{pairing::Pairing, AffineRepr};
+use ark_ff::{BigInt, Field, PrimeField};
+use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
 use ark_poly_commit::multilinear_pc::data_structures::{
-  Commitment_G2, CommitterKey, Proof_G1, VerifierKey,
+  CommitmentG2, CommitterKey, Proof, ProofG1, VerifierKey,
 };
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
@@ -18,23 +19,23 @@ use std::ops::{AddAssign, Mul, MulAssign};
 use thiserror::Error;
 
 #[derive(Debug, Clone, CanonicalDeserialize, CanonicalSerialize)]
-pub struct MippProof<E: PairingEngine> {
-  pub comms_t: Vec<(<E as PairingEngine>::Fqk, <E as PairingEngine>::Fqk)>,
+pub struct MippProof<E: Pairing> {
+  pub comms_t: Vec<(<E as Pairing>::TargetField, <E as Pairing>::TargetField)>,
   pub comms_u: Vec<(E::G1Affine, E::G1Affine)>,
   pub final_a: E::G1Affine,
   pub final_h: E::G2Affine,
-  pub pst_proof_h: Proof_G1<E>,
+  pub pst_proof_h: ProofG1<E>,
 }
 
-impl<E: PairingEngine> MippProof<E> {
+impl<E: Pairing> MippProof<E> {
   pub fn prove<T: Transcript>(
     transcript: &mut impl Transcript,
     ck: &CommitterKey<E>,
     a: Vec<E::G1Affine>,
-    y: Vec<E::Fr>,
+    y: Vec<E::ScalarField>,
     h: Vec<E::G2Affine>,
     U: &E::G1Affine,
-    _T: &<E as PairingEngine>::Fqk,
+    T: &<E as Pairing>::TargetField,
   ) -> Result<MippProof<E>, Error> {
     // the values of vectors A and y rescaled at each step of the loop
     let (mut m_a, mut m_y) = (a.clone(), y.clone());
@@ -47,8 +48,8 @@ impl<E: PairingEngine> MippProof<E> {
     let mut comms_u = Vec::new();
 
     // the transcript challenges
-    let mut xs: Vec<E::Fr> = Vec::new();
-    let mut xs_inv: Vec<E::Fr> = Vec::new();
+    let mut xs: Vec<E::ScalarField> = Vec::new();
+    let mut xs_inv: Vec<E::ScalarField> = Vec::new();
 
     // we append only the MIPP because the aggregated commitment T has been
     // appended already
@@ -94,7 +95,7 @@ impl<E: PairingEngine> MippProof<E> {
       transcript.append(b"comm_u_r", &comm_u_r);
       transcript.append(b"comm_t_l", &comm_t_l);
       transcript.append(b"comm_t_r", &comm_t_r);
-      let c_inv = transcript.challenge_scalar::<E::Fr>(b"challenge_i");
+      let c_inv = transcript.challenge_scalar::<E::ScalarField>(b"challenge_i");
 
       // Optimization for multiexponentiation to rescale G2 elements with
       // 128-bit challenge Swap 'c' and 'c_inv' since we
@@ -122,17 +123,17 @@ impl<E: PairingEngine> MippProof<E> {
 
     // get the structured polynomial f_h for which final_h = h^f_h(vec{t})
     // is the PST commitment given generator h and toxic waste t
-    let poly = DenseMultilinearExtension::<E::Fr>::from_evaluations_vec(
+    let poly = DenseMultilinearExtension::<E::ScalarField>::from_evaluations_vec(
       xs_inv.len(),
-      Self::polynomial_evaluations_from_transcript::<E::Fr>(&xs_inv),
+      Self::polynomial_evaluations_from_transcript::<E::ScalarField>(&xs_inv),
     );
     let c = MultilinearPC::<E>::commit_g2(ck, &poly);
     debug_assert!(c.h_product == final_h);
 
     // generate a proof of opening final_h at a random  point
-    let rs: Vec<E::Fr> = (0..poly.num_vars)
+    let rs: Vec<E::ScalarField> = (0..poly.num_vars)
       .into_iter()
-      .map(|_| transcript.challenge_scalar::<E::Fr>(b"random_point"))
+      .map(|_| transcript.challenge_scalar::<E::ScalarField>(b"random_point"))
       .collect();
 
     let pst_proof_h = MultilinearPC::<E>::open_g1(ck, &poly, &rs);
@@ -176,20 +177,20 @@ impl<E: PairingEngine> MippProof<E> {
     vk: &VerifierKey<E>,
     transcript: &mut impl Transcript,
     proof: &MippProof<E>,
-    point: Vec<E::Fr>,
+    point: Vec<E::ScalarField>,
     U: &E::G1Affine,
-    T: &<E as PairingEngine>::Fqk,
+    T: &<E as Pairing>::TargetField,
   ) -> bool {
     let comms_u = proof.comms_u.clone();
     let comms_t = proof.comms_t.clone();
 
     let mut xs = Vec::new();
     let mut xs_inv = Vec::new();
-    let mut final_y = E::Fr::one();
+    let mut final_y = E::ScalarField::one();
 
     let mut final_res = MippTU {
       tc: T.clone(),
-      uc: U.into_projective(),
+      uc: U.into_group(),
     };
 
     transcript.append(b"U", U);
@@ -205,8 +206,7 @@ impl<E: PairingEngine> MippProof<E> {
       transcript.append(b"comm_u_r", comm_u_r);
       transcript.append(b"comm_t_l", comm_t_l);
       transcript.append(b"comm_t_r", comm_t_r);
-
-      let c_inv = transcript.challenge_scalar::<E::Fr>(b"challenge_i");
+      let c_inv = transcript.challenge_scalar::<E::ScalarField>(b"challenge_i");
       let c = c_inv.inverse().unwrap();
 
       xs.push(c);
@@ -215,17 +215,15 @@ impl<E: PairingEngine> MippProof<E> {
       // the verifier computes the final_y by themselves given
       // it's field operations so quite fast and parallelisation
       // doesn't bring much improvement
-      // TODO: look into alternatives
-      final_y *= E::Fr::one() + c_inv.mul(point[i]) - point[i];
+      final_y *= E::ScalarField::one() + c_inv.mul(point[i]) - point[i];
     }
-
     // First, each entry of T and U are multiplied independently by their
     // respective challenges which is done in parralel and, at the end,
     // the results are merged together for each vector following their
     // corresponding merge operation.
-    enum Op<'a, E: PairingEngine> {
-      TC(&'a E::Fqk, <E::Fr as PrimeField>::BigInt),
-      UC(&'a E::G1Affine, <E::Fr as PrimeField>::BigInt),
+  enum Op<'a, E: Pairing> {
+      TC(&'a E::TargetField, <E::ScalarField as PrimeField>::BigInt),
+      UC(&'a E::G1Affine, &'a E::ScalarField),
     }
 
     let res = comms_t
@@ -236,25 +234,22 @@ impl<E: PairingEngine> MippProof<E> {
         let (comm_t_l, comm_t_r) = comm_t;
         let (comm_u_l, comm_u_r) = comm_u;
 
-        let c_repr = c.into_repr();
-        let c_inv_repr = c_inv.into_repr();
-
         // we multiple left side by x^-1 and right side by x
         vec![
-          Op::TC::<E>(comm_t_l, c_inv_repr),
-          Op::TC(comm_t_r, c_repr),
-          Op::UC(comm_u_l, c_inv_repr),
-          Op::UC(comm_u_r, c_repr),
+          Op::TC::<E>(comm_t_l, c_inv.into_bigint()),
+          Op::TC(comm_t_r, c.into_bigint()),
+          Op::UC(comm_u_l, c_inv),
+          Op::UC(comm_u_r, c),
         ]
       })
       .fold(MippTU::<E>::default, |mut res, op: Op<E>| {
         match op {
           Op::TC(tx, c) => {
-            let tx: E::Fqk = tx.pow(c);
+            let tx: E::TargetField = tx.pow(c);
             res.tc.mul_assign(&tx);
           }
           Op::UC(zx, c) => {
-            let uxp: E::G1Projective = zx.mul(c);
+            let uxp: E::G1 = zx.mul(c);
             res.uc.add_assign(&uxp);
           }
         }
@@ -269,11 +264,11 @@ impl<E: PairingEngine> MippProof<E> {
     let ref_final_res = &mut final_res;
     ref_final_res.merge(&res);
 
-    let mut rs: Vec<E::Fr> = Vec::new();
+    let mut point: Vec<E::ScalarField> = Vec::new();
     let m = xs_inv.len();
-    for _i in 0..m {
-      let r = transcript.challenge_scalar::<E::Fr>(b"random_rs");
-      rs.push(r);
+    for i in 0..m {
+      let r = transcript.challenge_scalar::<E::ScalarField>(b"random_point");
+      point.push(r);
     }
 
     // Given f_h is structured, the verifier can compute it's evaluation at
@@ -281,17 +276,17 @@ impl<E: PairingEngine> MippProof<E> {
     // verification to ensure final_h is well formed.
     let v = (0..m)
       .into_par_iter()
-      .map(|i| E::Fr::one() + rs[i].mul(xs_inv[m - i - 1]) - rs[i])
+      .map(|i| E::ScalarField::one() + point[i].mul(xs_inv[m - i - 1]) - point[i])
       .product();
 
-    let comm_h = Commitment_G2 {
+    let comm_h = CommitmentG2 {
       nv: m,
       h_product: proof.final_h,
     };
-    let check_h = MultilinearPC::<E>::check_2(vk, &comm_h, &rs, v, &proof.pst_proof_h);
+    let check_h = MultilinearPC::<E>::check_2(vk, &comm_h, &point, v, &proof.pst_proof_h);
 
     let final_u = proof.final_a.mul(final_y);
-    let final_t: <E as PairingEngine>::Fqk = E::pairing(proof.final_a, proof.final_h);
+    let final_t: <E as Pairing>::TargetField = E::pairing(proof.final_a, proof.final_h).0;
 
     let check_t = ref_final_res.tc == final_t;
 
@@ -303,26 +298,26 @@ impl<E: PairingEngine> MippProof<E> {
 
 /// MippTU keeps track of the variables that have been sent by the prover and
 /// must be multiplied together by the verifier.
-struct MippTU<E: PairingEngine> {
-  pub tc: E::Fqk,
-  pub uc: E::G1Projective,
+struct MippTU<E: Pairing> {
+  pub tc: E::TargetField,
+  pub uc: E::G1,
 }
 
 impl<E> Default for MippTU<E>
 where
-  E: PairingEngine,
+  E: Pairing,
 {
   fn default() -> Self {
     Self {
-      tc: E::Fqk::one(),
-      uc: E::G1Projective::zero(),
+      tc: E::TargetField::one(),
+      uc: E::G1::zero(),
     }
   }
 }
 
 impl<E> MippTU<E>
 where
-  E: PairingEngine,
+  E: Pairing,
 {
   fn merge(&mut self, other: &Self) {
     self.tc.mul_assign(&other.tc);
@@ -333,15 +328,15 @@ where
 /// compress modifies the `vec` vector by setting the value at
 /// index $i:0 -> split$  $vec[i] = vec[i] + vec[i+split]^scaler$.
 /// The `vec` vector is half of its size after this call.
-pub fn compress<C: AffineCurve>(vec: &mut Vec<C>, split: usize, scaler: &C::ScalarField) {
+pub fn compress<C: AffineRepr>(vec: &mut Vec<C>, split: usize, scaler: &C::ScalarField) {
   let (left, right) = vec.split_at_mut(split);
   left
     .par_iter_mut()
     .zip(right.par_iter())
     .for_each(|(a_l, a_r)| {
       // TODO remove that with master version
-      let mut x = a_r.mul(scaler.into_repr());
-      x.add_assign_mixed(&a_l);
+      let mut x = a_r.mul(scaler);
+      x.add_assign(a_l.into_group());
       *a_l = x.into_affine();
     });
   let len = left.len();
@@ -364,31 +359,28 @@ pub fn compress_field<F: PrimeField>(vec: &mut Vec<F>, split: usize, scaler: &F)
   vec.resize(len, F::zero());
 }
 
-pub fn multiexponentiation<G: AffineCurve>(
+pub fn multiexponentiation<G: AffineRepr>(
   left: &[G],
   right: &[G::ScalarField],
-) -> Result<G::Projective, Error> {
+) -> Result<G::Group, Error> {
   if left.len() != right.len() {
     return Err(Error::InvalidIPVectorLength);
   }
 
-  Ok(VariableBaseMSM::multi_scalar_mul(
-    left,
-    &cfg_iter!(right).map(|s| s.into_repr()).collect::<Vec<_>>(),
-  ))
+  Ok(<G::Group as VariableBaseMSM>::msm_unchecked(left, right))
 }
 
-pub fn pairings_product<E: PairingEngine>(gs: &[E::G1Affine], hs: &[E::G2Affine]) -> E::Fqk {
-  let pairings: Vec<_> = gs
-    .into_par_iter()
-    .map(|g| <E as PairingEngine>::G1Prepared::from(*g))
-    .zip(
-      hs.into_par_iter()
-        .map(|h| <E as PairingEngine>::G2Prepared::from(*h)),
-    )
-    .collect();
+pub fn pairings_product<E: Pairing>(gs: &[E::G1Affine], hs: &[E::G2Affine]) -> E::TargetField {
+  //let pairings: Vec<_> = gs
+  //  .into_par_iter()
+  //  .map(|g| <E as Pairing>::G1Prepared::from(*g))
+  //  .zip(
+  //    hs.into_par_iter()
+  //      .map(|h| <E as Pairing>::G2Prepared::from(*h)),
+  //  )
+  //  .collect();
 
-  E::product_of_pairings(pairings.iter())
+  E::multi_pairing(gs, hs).0
 }
 
 #[derive(Debug, Error)]

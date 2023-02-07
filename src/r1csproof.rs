@@ -12,16 +12,17 @@ use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
 use ark_bls12_377::Bls12_377 as I;
 use ark_bw6_761::BW6_761 as P;
-use ark_ec::PairingEngine;
-
+use ark_ec::pairing::Pairing;
+use ark_poly::MultilinearExtension;
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
+use ark_poly_commit::multilinear_pc::MultilinearPC;
 
 use super::r1csinstance::R1CSInstance;
 
 use super::scalar::Scalar;
 use super::sparse_mlpoly::{SparsePolyEntry, SparsePolynomial};
 use super::timer::Timer;
-use ark_crypto_primitives::{CircuitSpecificSetupSNARK, SNARK};
+use ark_snark::{CircuitSpecificSetupSNARK, SNARK};
 
 use ark_groth16::Groth16;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem};
@@ -43,7 +44,7 @@ pub struct R1CSProof {
   ry: Vec<Scalar>,
   // The transcript state after the satisfiability proof was computed.
   pub transcript_sat_state: Scalar,
-  pub t: <I as PairingEngine>::Fqk,
+  pub t: <I as Pairing>::TargetField,
   pub mipp_proof: MippProof<I>,
 }
 #[derive(Clone)]
@@ -154,7 +155,7 @@ impl R1CSProof {
     let (comm_list, t) = pl.commit(&gens.gens_pc.ck);
 
     let mut bytes = Vec::new();
-    t.serialize(&mut bytes).unwrap();
+    t.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
     transcript.append_bytes(&bytes);
 
     // comm.append_to_poseidon(transcript);
@@ -288,7 +289,10 @@ impl R1CSProof {
   ) -> Result<(u128, u128, u128), ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
     let mut bytes = Vec::new();
-    self.t.serialize(&mut bytes).unwrap();
+    self
+      .t
+      .serialize_with_mode(&mut bytes, Compress::Yes)
+      .unwrap();
     transcript.append_bytes(&bytes);
 
     let c = transcript.challenge_scalar();
@@ -322,22 +326,20 @@ impl R1CSProof {
       transcript_sat_state: self.transcript_sat_state,
     };
 
-    let mut rng = ark_std::test_rng();
-
     let prove_inner = Timer::new("proveinnercircuit");
     let start = Instant::now();
-    let circuit = VerifierCircuit::new(&config, &mut rng).unwrap();
+    let circuit = VerifierCircuit::new(&config, &mut rand::thread_rng()).unwrap();
     let dp1 = start.elapsed().as_millis();
     prove_inner.stop();
 
     // this is universal, we don't measure it
     let start = Instant::now();
-    let (pk, vk) = Groth16::<P>::setup(circuit.clone(), &mut rng).unwrap();
+    let (pk, vk) = Groth16::<P>::setup(circuit.clone(), &mut rand::thread_rng()).unwrap();
     let ds = start.elapsed().as_millis();
 
     let prove_outer = Timer::new("proveoutercircuit");
     let start = Instant::now();
-    let proof = Groth16::<P>::prove(&pk, circuit, &mut rng).unwrap();
+    let proof = Groth16::<P>::prove(&pk, circuit, &mut rand::thread_rng()).unwrap();
     let dp2 = start.elapsed().as_millis();
     prove_outer.stop();
 
@@ -383,7 +385,10 @@ impl R1CSProof {
   ) -> Result<usize, ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
     let mut bytes = Vec::new();
-    self.t.serialize(&mut bytes).unwrap();
+    self
+      .t
+      .serialize_with_mode(&mut bytes, Compress::Yes)
+      .unwrap();
     transcript.append_bytes(&bytes);
 
     let c = transcript.challenge_scalar();
@@ -418,7 +423,7 @@ impl R1CSProof {
     };
 
     let mut rng = ark_std::test_rng();
-    let circuit = VerifierCircuit::new(&config, &mut rng).unwrap();
+    let circuit = VerifierCircuit::new(&config, &mut rand::thread_rng()).unwrap();
 
     let nc_inner = verify_constraints_inner(circuit.clone(), &num_cons);
 
