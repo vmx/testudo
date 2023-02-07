@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyCommitmentGens};
 use super::errors::ProofVerifyError;
-use crate::constraints::{VerifierCircuit, VerifierConfig};
+use crate::constraints::{R1CSVerificationCircuit, VerifierConfig};
 use crate::group::{Fq, Fr};
 use crate::math::Math;
 use crate::mipp::MippProof;
@@ -14,7 +14,6 @@ use ark_bw6_761::BW6_761 as P;
 use ark_ec::pairing::Pairing;
 
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
-
 
 use super::r1csinstance::R1CSInstance;
 
@@ -302,26 +301,26 @@ impl R1CSProof {
       transcript_sat_state: self.transcript_sat_state,
     };
 
-    let prove_inner = Timer::new("proveinnercircuit");
-    let start = Instant::now();
-    let circuit = VerifierCircuit::new(&config, &mut rand::thread_rng()).unwrap();
-    let dp1 = start.elapsed().as_millis();
-    prove_inner.stop();
+    let circuit = R1CSVerificationCircuit::new(&config);
 
     // this is universal, we don't measure it
     let start = Instant::now();
-    let (pk, vk) = Groth16::<P>::setup(circuit.clone(), &mut rand::thread_rng()).unwrap();
+    let (pk, vk) = Groth16::<I>::setup(circuit.clone(), &mut rand::thread_rng()).unwrap();
     let ds = start.elapsed().as_millis();
 
-    let prove_outer = Timer::new("proveoutercircuit");
+    let prove_outer = Timer::new("provecircuit");
     let start = Instant::now();
-    let proof = Groth16::<P>::prove(&pk, circuit, &mut rand::thread_rng()).unwrap();
-    let dp2 = start.elapsed().as_millis();
+    let proof = Groth16::<I>::prove(&pk, circuit, &mut rand::thread_rng()).unwrap();
+    let dp = start.elapsed().as_millis();
     prove_outer.stop();
 
     let start = Instant::now();
     let verifier_time = Timer::new("groth16_verification");
-    let is_verified = Groth16::<P>::verify(&vk, &[], &proof).unwrap();
+    let (v_A, v_B, v_C, v_AB) = self.claims_phase2;
+    let mut pubs = vec![];
+    pubs.extend(self.ry.clone());
+    pubs.extend(vec![self.eval_vars_at_ry, self.transcript_sat_state]);
+    let is_verified = Groth16::<I>::verify(&vk, &pubs, &proof).unwrap();
     assert!(is_verified);
     verifier_time.stop();
 
@@ -345,7 +344,7 @@ impl R1CSProof {
     assert!(res == true);
     let dv = start.elapsed().as_millis();
 
-    Ok((ds, dp1 + dp2, dv))
+    Ok((ds, dp, dv))
   }
 
   // Helper function to find the number of constraint in the circuit which
@@ -399,31 +398,31 @@ impl R1CSProof {
     };
 
     let _rng = ark_std::test_rng();
-    let circuit = VerifierCircuit::new(&config, &mut rand::thread_rng()).unwrap();
+    let circuit = R1CSVerificationCircuit::new(&config);
+    let cs = ConstraintSystem::<Fr>::new_ref();
+    circuit.generate_constraints(cs.clone()).unwrap();
+    assert!(cs.is_satisfied().unwrap());
 
-    let nc_inner = verify_constraints_inner(circuit.clone(), &num_cons);
-
-    let nc_outer = verify_constraints_outer(circuit, &num_cons);
-    Ok(nc_inner + nc_outer)
+    Ok(cs.num_constraints())
   }
 }
 
-fn verify_constraints_outer(circuit: VerifierCircuit, _num_cons: &usize) -> usize {
-  let cs = ConstraintSystem::<Fq>::new_ref();
-  circuit.generate_constraints(cs.clone()).unwrap();
-  assert!(cs.is_satisfied().unwrap());
-  cs.num_constraints()
-}
+// fn verify_constraints_outer(circuit: VerifierCircuit, _num_cons: &usize) -> usize {
+//   let cs = ConstraintSystem::<Fq>::new_ref();
+//   circuit.generate_constraints(cs.clone()).unwrap();
+//   assert!(cs.is_satisfied().unwrap());
+//   cs.num_constraints()
+// }
 
-fn verify_constraints_inner(circuit: VerifierCircuit, _num_cons: &usize) -> usize {
-  let cs = ConstraintSystem::<Fr>::new_ref();
-  circuit
-    .inner_circuit
-    .generate_constraints(cs.clone())
-    .unwrap();
-  assert!(cs.is_satisfied().unwrap());
-  cs.num_constraints()
-}
+// fn verify_constraints_inner(circuit: VerifierCircuit, _num_cons: &usize) -> usize {
+//   let cs = ConstraintSystem::<Fr>::new_ref();
+//   circuit
+//     .inner_circuit
+//     .generate_constraints(cs.clone())
+//     .unwrap();
+//   assert!(cs.is_satisfied().unwrap());
+//   cs.num_constraints()
+// }
 
 #[cfg(test)]
 mod tests {
