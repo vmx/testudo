@@ -1,12 +1,7 @@
-use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
-
-use super::commitments::{Commitments, MultiCommitGens};
-use super::group::GroupElement;
 use super::scalar::Scalar;
-use super::transcript::{AppendToTranscript, ProofTranscript};
+use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
 use ark_ff::Field;
 use ark_serialize::*;
-use merlin::Transcript;
 // ax^2 + bx + c stored as vec![c,b,a]
 // ax^3 + bx^2 + cx + d stored as vec![d,c,b,a]
 #[derive(Debug, CanonicalDeserialize, CanonicalSerialize, Clone)]
@@ -60,10 +55,6 @@ impl UniPoly {
     self.coeffs.len() - 1
   }
 
-  pub fn as_vec(&self) -> Vec<Scalar> {
-    self.coeffs.clone()
-  }
-
   pub fn eval_at_zero(&self) -> Scalar {
     self.coeffs[0]
   }
@@ -88,10 +79,6 @@ impl UniPoly {
     CompressedUniPoly {
       coeffs_except_linear_term,
     }
-  }
-
-  pub fn commit(&self, gens: &MultiCommitGens, blind: &Scalar) -> GroupElement {
-    self.coeffs.commit(blind, gens)
   }
 }
 
@@ -119,16 +106,6 @@ impl AppendToPoseidon for UniPoly {
       transcript.append_scalar(&self.coeffs[i]);
     }
     // transcript.append_message(label, b"UniPoly_end");
-  }
-}
-
-impl AppendToTranscript for UniPoly {
-  fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
-    transcript.append_message(label, b"UniPoly_begin");
-    for i in 0..self.coeffs.len() {
-      transcript.append_scalar(b"coeff", &self.coeffs[i]);
-    }
-    transcript.append_message(label, b"UniPoly_end");
   }
 }
 

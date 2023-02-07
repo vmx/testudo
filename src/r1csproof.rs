@@ -1,5 +1,4 @@
 #![allow(clippy::too_many_arguments)]
-use super::commitments::MultiCommitGens;
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyCommitmentGens};
 use super::errors::ProofVerifyError;
 use crate::constraints::{VerifierCircuit, VerifierConfig};
@@ -46,31 +45,9 @@ pub struct R1CSProof {
   pub t: <I as PairingEngine>::Fqk,
   pub mipp_proof: MippProof<I>,
 }
-#[derive(Clone)]
-pub struct R1CSSumcheckGens {
-  gens_1: MultiCommitGens,
-  gens_3: MultiCommitGens,
-  gens_4: MultiCommitGens,
-}
-
-// TODO: fix passing gens_1_ref
-impl R1CSSumcheckGens {
-  pub fn new(label: &'static [u8], gens_1_ref: &MultiCommitGens) -> Self {
-    let gens_1 = gens_1_ref.clone();
-    let gens_3 = MultiCommitGens::new(3, label);
-    let gens_4 = MultiCommitGens::new(4, label);
-
-    R1CSSumcheckGens {
-      gens_1,
-      gens_3,
-      gens_4,
-    }
-  }
-}
 
 #[derive(Clone)]
 pub struct R1CSGens {
-  gens_sc: R1CSSumcheckGens,
   gens_pc: PolyCommitmentGens,
 }
 
@@ -78,8 +55,7 @@ impl R1CSGens {
   pub fn new(label: &'static [u8], _num_cons: usize, num_vars: usize) -> Self {
     let num_poly_vars = num_vars.log_2();
     let gens_pc = PolyCommitmentGens::new(num_poly_vars, label);
-    let gens_sc = R1CSSumcheckGens::new(label, &gens_pc.gens.gens_1);
-    R1CSGens { gens_sc, gens_pc }
+    R1CSGens { gens_pc }
   }
 }
 

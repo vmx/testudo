@@ -13,11 +13,9 @@ use super::product_tree::{DotProductCircuit, ProductCircuit, ProductCircuitEvalP
 use super::random::RandomTape;
 use super::scalar::Scalar;
 use super::timer::Timer;
-use super::transcript::AppendToTranscript;
 use ark_ff::{Field, One, Zero};
 use ark_serialize::*;
 use core::cmp::Ordering;
-use merlin::Transcript;
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct SparseMatEntry {
@@ -209,14 +207,6 @@ impl DerefsEvalProof {
   }
 }
 
-impl AppendToTranscript for DerefsCommitment {
-  fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
-    transcript.append_message(b"derefs_commitment", b"begin_derefs_commitment");
-    self.comm_ops_val.append_to_transcript(label, transcript);
-    transcript.append_message(b"derefs_commitment", b"end_derefs_commitment");
-  }
-}
-
 impl AppendToPoseidon for DerefsCommitment {
   fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
     self.comm_ops_val.append_to_poseidon(transcript);
@@ -334,20 +324,6 @@ pub struct SparseMatPolyCommitment {
   num_mem_cells: usize,
   comm_comb_ops: PolyCommitment,
   comm_comb_mem: PolyCommitment,
-}
-
-impl AppendToTranscript for SparseMatPolyCommitment {
-  fn append_to_transcript(&self, _label: &'static [u8], transcript: &mut Transcript) {
-    transcript.append_u64(b"batch_size", self.batch_size as u64);
-    transcript.append_u64(b"num_ops", self.num_ops as u64);
-    transcript.append_u64(b"num_mem_cells", self.num_mem_cells as u64);
-    self
-      .comm_comb_ops
-      .append_to_transcript(b"comm_comb_ops", transcript);
-    self
-      .comm_comb_mem
-      .append_to_transcript(b"comm_comb_mem", transcript);
-  }
 }
 
 impl AppendToPoseidon for SparseMatPolyCommitment {
