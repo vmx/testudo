@@ -71,7 +71,7 @@ impl<F: PrimeField> Derefs<F> {
   where
     E: Pairing<ScalarField = F>,
   {
-    let (comm_ops_val, _blinds) = self.comb.commit(gens);
+    let (comm_ops_val, _blinds) = self.comb.commit(gens, false);
     DerefsCommitment { comm_ops_val }
   }
 }
@@ -82,7 +82,6 @@ pub struct DerefsEvalProof<E: Pairing> {
 }
 
 impl<E: Pairing> DerefsEvalProof<E> {
-
   fn prove_single(
     joint_poly: &DensePolynomial<E::ScalarField>,
     r: &[E::ScalarField],
@@ -483,8 +482,8 @@ impl<F: PrimeField> SparseMatPolynomial<F> {
     let batch_size = sparse_polys.len();
     let dense = SparseMatPolynomial::multi_sparse_to_dense_rep(sparse_polys);
 
-    let (comm_comb_ops, _blinds_comb_ops) = dense.comb_ops.commit(&gens.gens_ops);
-    let (comm_comb_mem, _blinds_comb_mem) = dense.comb_mem.commit(&gens.gens_mem);
+    let (comm_comb_ops, _blinds_comb_ops) = dense.comb_ops.commit(&gens.gens_ops, false);
+    let (comm_comb_mem, _blinds_comb_mem) = dense.comb_mem.commit(&gens.gens_mem, false);
 
     (
       SparseMatPolyCommitment {
@@ -683,7 +682,6 @@ struct HashLayerProof<E: Pairing> {
 }
 
 impl<E: Pairing> HashLayerProof<E> {
-
   fn prove_helper(
     rand: (&Vec<E::ScalarField>, &Vec<E::ScalarField>),
     addr_timestamps: &AddrTimestamps<E::ScalarField>,
@@ -1030,7 +1028,6 @@ struct ProductLayerProof<F: PrimeField> {
 }
 
 impl<F: PrimeField> ProductLayerProof<F> {
-
   pub fn prove(
     row_prod_layer: &mut ProductLayer<F>,
     col_prod_layer: &mut ProductLayer<F>,
@@ -1322,7 +1319,6 @@ struct PolyEvalNetworkProof<E: Pairing> {
 }
 
 impl<E: Pairing> PolyEvalNetworkProof<E> {
-
   pub fn prove(
     network: &mut PolyEvalNetwork<E::ScalarField>,
     dense: &MultiSparseMatPolynomialAsDense<E::ScalarField>,
@@ -1423,7 +1419,6 @@ pub struct SparseMatPolyEvalProof<E: Pairing> {
 }
 
 impl<E: Pairing> SparseMatPolyEvalProof<E> {
-
   fn equalize(
     rx: &[E::ScalarField],
     ry: &[E::ScalarField],
