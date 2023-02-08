@@ -8,7 +8,9 @@ use crate::parameters::poseidon_params;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
+use crate::transcript::{Transcript, TranscriptWriter};
 use ark_bls12_377::Bls12_377 as I;
+use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use ark_ec::pairing::Pairing;
 
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
@@ -142,15 +144,15 @@ impl<E: Pairing> R1CSProof<E> {
 
     let mut bytes = Vec::new();
     t.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
-    transcript.append_bytes(&bytes);
+    transcript.append(b"", &bytes);
 
     // comm.append_to_poseidon(transcript);
     timer_commit.stop();
 
-    let c = transcript.challenge_scalar();
+    let c = transcript.challenge_scalar(b"");
     transcript.new_from_state(&c);
 
-    transcript.append_scalar_vector(input);
+    transcript.append(b"", &input);
 
     let timer_sc_proof_phase1 = Timer::new("prove_sc_phase_one");
 
@@ -167,7 +169,7 @@ impl<E: Pairing> R1CSProof<E> {
 
     // derive the verifier's challenge tau
     let (num_rounds_x, num_rounds_y) = (inst.get_num_cons().log_2(), z.len().log_2());
-    let tau = transcript.challenge_vector(num_rounds_x);
+    let tau = transcript.challenge_scalar_vec(b"", num_rounds_x);
     // compute the initial evaluation table for R(\tau, x)
     let mut poly_tau = DensePolynomial::new(EqPolynomial::new(tau).evals());
     let (mut poly_Az, mut poly_Bz, mut poly_Cz) =
@@ -197,9 +199,9 @@ impl<E: Pairing> R1CSProof<E> {
 
     let timer_sc_proof_phase2 = Timer::new("prove_sc_phase_two");
     // combine the three claims into a single claim
-    let r_A = transcript.challenge_scalar();
-    let r_B = transcript.challenge_scalar();
-    let r_C = transcript.challenge_scalar();
+    let r_A: E::ScalarField = transcript.challenge_scalar(b"");
+    let r_B: E::ScalarField = transcript.challenge_scalar(b"");
+    let r_C: E::ScalarField = transcript.challenge_scalar(b"");
     let claim_phase2 = r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim;
 
     let evals_ABC = {
@@ -224,7 +226,7 @@ impl<E: Pairing> R1CSProof<E> {
       transcript,
     );
     timer_sc_proof_phase2.stop();
-    let c = transcript.challenge_scalar();
+    let c = transcript.challenge_scalar(b"");
     transcript.new_from_state(&c);
 
     // TODO: modify the polynomial evaluation in Spartan to be consistent
@@ -272,6 +274,7 @@ impl<E: Pairing> R1CSProof<E> {
     evals: &(E::ScalarField, E::ScalarField, E::ScalarField),
     transcript: &mut PoseidonTranscript<E::ScalarField>,
     gens: &R1CSGens<E>,
+    poseidon: PoseidonConfig<E::ScalarField>,
   ) -> Result<(u128, u128, u128), ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
     let mut bytes = Vec::new();
@@ -279,16 +282,16 @@ impl<E: Pairing> R1CSProof<E> {
       .t
       .serialize_with_mode(&mut bytes, Compress::Yes)
       .unwrap();
-    transcript.append_bytes(&bytes);
+    transcript.append(b"", &bytes);
 
-    let c = transcript.challenge_scalar();
+    let c = transcript.challenge_scalar(b"");
 
     let mut input_as_sparse_poly_entries = vec![SparsePolyEntry::new(0, E::ScalarField::one())];
     //remaining inputs
     input_as_sparse_poly_entries.extend(
       (0..input.len())
         .map(|i| SparsePolyEntry::new(i + 1, input[i]))
-        .collect::<Vec<SparsePolyEntry>>(),
+        .collect::<Vec<SparsePolyEntry<E::ScalarField>>>(),
     );
 
     let n = num_vars;
@@ -300,7 +303,7 @@ impl<E: Pairing> R1CSProof<E> {
       num_cons,
       input: input.to_vec(),
       evals: *evals,
-      params: poseidon_params(),
+      params: poseidon,
       prev_challenge: c,
       claims_phase2: self.claims_phase2,
       polys_sc1: self.sc_proof_phase1.polys.clone(),
@@ -315,8 +318,9 @@ impl<E: Pairing> R1CSProof<E> {
     let circuit = R1CSVerificationCircuit::new(&config);
 
     // this is universal, we don't measure it
+    // TODO put this _outside_ the verification
     let start = Instant::now();
-    let (pk, vk) = Groth16::<I>::setup(circuit.clone(), &mut rand::thread_rng()).unwrap();
+    let (pk, vk) = Groth16::<E>::setup(circuit.clone(), &mut rand::thread_rng()).unwrap();
     let ds = start.elapsed().as_millis();
 
     let prove_outer = Timer::new("provecircuit");

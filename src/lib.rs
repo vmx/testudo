@@ -41,12 +41,10 @@ pub mod parameters;
 mod constraints;
 pub mod poseidon_transcript;
 
-use ark_ff::Field;
-
 use ark_serialize::*;
-use ark_std::Zero;
 use core::cmp::max;
 use errors::{ProofVerifyError, R1CSError};
+use transcript::Transcript;
 use transcript::TranscriptWriter;
 
 use poseidon_transcript::PoseidonTranscript;
@@ -415,9 +413,9 @@ impl<E: Pairing> SNARK<E> {
     let timer_eval = Timer::new("eval_sparse_polys");
     let inst_evals = {
       let (Ar, Br, Cr) = inst.inst.evaluate(&rx, &ry);
-      transcript.appedn(&Ar);
-      transcript.append(&Br);
-      transcript.append(&Cr);
+      transcript.append(b"", &Ar);
+      transcript.append(b"", &Br);
+      transcript.append(b"", &Cr);
       (Ar, Br, Cr)
     };
     timer_eval.stop();
@@ -462,7 +460,7 @@ impl<E: Pairing> SNARK<E> {
     // transcript.append_protocol_name(SNARK::protocol_name());
 
     // append a commitment to the computation to the transcript
-    comm.comm.append_to_poseidon(transcript);
+    comm.comm.write_to_transcript(transcript);
 
     let timer_sat_proof = Timer::new("verify_sat_proof");
     assert_eq!(input.assignment.len(), comm.comm.get_num_inputs());
@@ -485,9 +483,9 @@ impl<E: Pairing> SNARK<E> {
     // transcript.new_from_state(&self.r1cs_sat_proof.transcript_sat_state);
 
     let (Ar, Br, Cr) = &self.inst_evals;
-    transcript.append_scalar(&Ar);
-    transcript.append_scalar(&Br);
-    transcript.append_scalar(&Cr);
+    transcript.append(b"", Ar);
+    transcript.append(b"", Br);
+    transcript.append(b"", Cr);
 
     self.r1cs_eval_proof.verify(
       &comm.comm,
@@ -547,7 +545,7 @@ impl<E: Pairing> NIZK<E> {
   ) -> Self {
     let timer_prove = Timer::new("NIZK::prove");
     // transcript.append_protocol_name(NIZK::protocol_name());
-    transcript.append_bytes(&inst.digest);
+    transcript.append(b"", &inst.digest);
 
     let (r1cs_sat_proof, rx, ry) = {
       // we might need to pad variables
@@ -593,7 +591,7 @@ impl<E: Pairing> NIZK<E> {
   ) -> Result<usize, ProofVerifyError> {
     let timer_verify = Timer::new("NIZK::verify");
 
-    transcript.append(&inst.digest);
+    transcript.append(b"", &inst.digest);
 
     // We send evaluations of A, B, C at r = (rx, ry) as claims
     // to enable the verifier complete the first sum-check
@@ -634,7 +632,7 @@ impl<E: Pairing> NIZK<E> {
     let timer_verify = Timer::new("NIZK::verify");
 
     // transcript.append_protocol_name(NIZK::protocol_name());
-    transcript.append_bytes(&inst.digest);
+    transcript.append(b"", &inst.digest);
 
     // We send evaluations of A, B, C at r = (rx, ry) as claims
     // to enable the verifier complete the first sum-check
@@ -665,10 +663,11 @@ impl<E: Pairing> NIZK<E> {
   }
 }
 
+#[inline]
 pub(crate) fn dot_product<F: PrimeField>(a: &[F], b: &[F]) -> F {
   let mut res = F::zero();
   for i in 0..a.len() {
-    res += &a[i] * &b[i];
+    res += a[i] * &b[i];
   }
   res
 }
@@ -678,6 +677,7 @@ mod tests {
   use crate::parameters::poseidon_params;
 
   use super::*;
+  use crate::ark_std::Zero;
   use ark_ff::{BigInteger, One, PrimeField};
   type F = ark_bls12_377::Fr;
   type E = ark_bls12_377::Bls12_377;
@@ -689,7 +689,7 @@ mod tests {
     let num_inputs = 10;
 
     // produce public generators
-    let gens = SNARKGens::new(num_cons, num_vars, num_inputs, num_cons);
+    let gens = SNARKGens::<E>::new(num_cons, num_vars, num_inputs, num_cons);
 
     // produce a synthetic R1CSInstance
     let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
@@ -733,7 +733,7 @@ mod tests {
     let B = vec![(100, 1, zero.to_vec())];
     let C = vec![(1, 1, zero.to_vec())];
 
-    let inst = Instance::new(num_cons, num_vars, num_inputs, &A, &B, &C);
+    let inst = Instance::<F>::new(num_cons, num_vars, num_inputs, &A, &B, &C);
     assert!(inst.is_err());
     assert_eq!(inst.err(), Some(R1CSError::InvalidIndex));
   }
@@ -758,7 +758,7 @@ mod tests {
     let B = vec![(1, 1, larger_than_mod.to_vec())];
     let C = vec![(1, 1, zero.to_vec())];
 
-    let inst = Instance::new(num_cons, num_vars, num_inputs, &A, &B, &C);
+    let inst = Instance::<F>::new(num_cons, num_vars, num_inputs, &A, &B, &C);
     assert!(inst.is_err());
     assert_eq!(inst.err(), Some(R1CSError::InvalidScalar));
   }
@@ -793,7 +793,7 @@ mod tests {
     inputs[1] = F::from(1u64).into_bigint().to_bytes_le();
     inputs[2] = F::from(2u64).into_bigint().to_bytes_le();
 
-    let assignment_inputs = InputsAssignment::new(&inputs).unwrap();
+    let assignment_inputs = InputsAssignment::<F>::new(&inputs).unwrap();
     let assignment_vars = VarsAssignment::new(&vars).unwrap();
 
     // Check if instance is satisfiable
@@ -802,7 +802,7 @@ mod tests {
     assert!(res.unwrap(), "should be satisfied");
 
     // SNARK public params
-    let gens = SNARKGens::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+    let gens = SNARKGens::<E>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
 
     // create a commitment to the R1CS instance
     let (comm, decomm) = SNARK::encode(&inst, &gens);
@@ -828,7 +828,7 @@ mod tests {
       .is_ok());
 
     // NIZK public params
-    let gens = NIZKGens::new(num_cons, num_vars, num_inputs);
+    let gens = NIZKGens::<E>::new(num_cons, num_vars, num_inputs);
 
     let params = poseidon_params();
 

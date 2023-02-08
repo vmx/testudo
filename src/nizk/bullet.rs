@@ -4,6 +4,7 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 use super::super::errors::ProofVerifyError;
+use ark_ec::AffineRepr;
 use crate::math::Math;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::Transcript;
@@ -12,6 +13,7 @@ use ark_ff::Field;
 use ark_serialize::*;
 use ark_std::{One, Zero};
 use core::iter;
+use std::ops::Mul;
 use std::ops::MulAssign;
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
@@ -33,9 +35,9 @@ impl<G: CurveGroup> BulletReductionProof<G> {
   /// either 0 or a power of 2.
   pub fn prove(
     transcript: &mut PoseidonTranscript<G::ScalarField>,
-    Q: &G,
-    G_vec: &[G],
-    H: &G,
+    Q: &G::Affine,
+    G_vec: &[G::Affine],
+    H: &G::Affine,
     a_vec: &[G::ScalarField],
     b_vec: &[G::ScalarField],
     blind: &G::ScalarField,
@@ -73,8 +75,8 @@ impl<G: CurveGroup> BulletReductionProof<G> {
 
     while n != 1 {
       n /= 2;
-      let (a_L, a_R) = a.split_at_mut(n);
-      let (b_L, b_R) = b.split_at_mut(n);
+      let (mut a_L, mut a_R) = a.split_at_mut(n);
+      let (mut b_L, mut b_R) = b.split_at_mut(n);
       let (G_L, G_R) = G.split_at_mut(n);
 
       let c_L = inner_product(a_L, b_R);
@@ -86,10 +88,10 @@ impl<G: CurveGroup> BulletReductionProof<G> {
         .chain(iter::once(Q))
         .chain(iter::once(H))
         .cloned()
-        .collect::<Vec<G>>();
+        .collect::<Vec<G::Affine>>();
 
       let L = G::msm_unchecked(
-        &G::normalize_batch(&gright_vec),
+        &gright_vec,
         a_L
           .iter()
           .chain(iter::once(&c_L))
@@ -103,9 +105,9 @@ impl<G: CurveGroup> BulletReductionProof<G> {
         .chain(iter::once(Q))
         .chain(iter::once(H))
         .cloned()
-        .collect::<Vec<G>>();
+        .collect::<Vec<G::Affine>>();
       let R = G::msm_unchecked(
-        &G::normalize_batch(&gl_vec),
+        &gl_vec,
         a_R
           .iter()
           .chain(iter::once(&c_R))
@@ -118,33 +120,33 @@ impl<G: CurveGroup> BulletReductionProof<G> {
       transcript.append(b"", &L);
       transcript.append(b"", &R);
 
-      let u = transcript.challenge_scalar(b"");
+      let u: G::ScalarField = transcript.challenge_scalar(b"");
       let u_inv = u.inverse().unwrap();
 
       for i in 0..n {
         a_L[i] = a_L[i] * u + u_inv * a_R[i];
         b_L[i] = b_L[i] * u_inv + u * b_R[i];
-        G_L[i] = G::msm(&[G_L[i], G_R[i]], &[u_inv, u]);
+        G_L[i] = (G_L[i].mul(u_inv) + G_R[i].mul(u)).into_affine();
       }
 
       blind_fin = blind_fin + u * u * blind_L + u_inv * u_inv * blind_R;
 
-      L_vec.push(L.compress());
-      R_vec.push(R.compress());
+      L_vec.push(L);
+      R_vec.push(R);
 
       a = a_L;
       b = b_L;
       G = G_L;
     }
 
-    let Gamma_hat = G::msm(&[G[0], *Q, *H], &[a[0], a[0] * b[0], blind_fin]);
+    let Gamma_hat = G::msm_unchecked(&[G[0], *Q, *H], &[a[0], a[0] * b[0], blind_fin]);
 
     (
       BulletReductionProof { L_vec, R_vec },
       Gamma_hat,
       a[0],
       b[0],
-      G[0],
+      G[0].into_group(),
       blind_fin,
     )
   }
@@ -177,9 +179,9 @@ impl<G: CurveGroup> BulletReductionProof<G> {
     // 1. Recompute x_k,...,x_1 based on the proof transcript
     let mut challenges = Vec::with_capacity(lg_n);
     for (L, R) in self.L_vec.iter().zip(self.R_vec.iter()) {
-      transcript.append_point(L);
-      transcript.append_point(R);
-      challenges.push(transcript.challenge_scalar());
+      transcript.append(b"", L);
+      transcript.append(b"", R);
+      challenges.push(transcript.challenge_scalar(b""));
     }
 
     // 2. Compute 1/(u_k...u_1) and 1/u_k, ..., 1/u_1
@@ -225,28 +227,25 @@ impl<G: CurveGroup> BulletReductionProof<G> {
     a: &[G::ScalarField],
     transcript: &mut PoseidonTranscript<G::ScalarField>,
     Gamma: &G,
-    G: &[G],
+    Gs: &[G::Affine],
   ) -> Result<(G, G, G::ScalarField), ProofVerifyError> {
     let (u_sq, u_inv_sq, s) = self.verification_scalars(n, transcript)?;
 
-    let Ls = self
-      .L_vec
-      .iter()
-      .map(|p| G::decompress(p).ok_or(ProofVerifyError::InternalError))
-      .collect::<Result<Vec<_>, _>>()?;
-
+    let Ls = self.L_vec;
     let Rs = self.R_vec;
 
-    let G_hat = G::msm(G, s.as_slice());
+    let G_hat = G::msm(Gs, s.as_slice()).map_err(|_| ProofVerifyError::InternalError)?;
     let a_hat = inner_product(a, &s);
 
     let Gamma_hat = G::msm(
-      Ls.iter()
-        .chain(Rs.iter())
-        .chain(iter::once(Gamma))
-        .copied()
-        .collect::<Vec<G>>()
-        .as_slice(),
+      &G::normalize_batch(
+        &Ls
+          .iter()
+          .chain(Rs.iter())
+          .chain(iter::once(Gamma))
+          .copied()
+          .collect::<Vec<G>>(),
+      ),
       u_sq
         .iter()
         .chain(u_inv_sq.iter())
@@ -254,7 +253,8 @@ impl<G: CurveGroup> BulletReductionProof<G> {
         .copied()
         .collect::<Vec<G::ScalarField>>()
         .as_slice(),
-    );
+    )
+    .map_err(|_| ProofVerifyError::InternalError)?;
 
     Ok((G_hat, Gamma_hat, a_hat))
   }

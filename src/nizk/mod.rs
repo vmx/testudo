@@ -57,18 +57,18 @@ impl<G: CurveGroup> DotProductProofLog<G> {
     assert_eq!(gens.n, n);
 
     // produce randomness for generating a proof
-    let d = G::ScalarField::rand(&mut rand::thread_rng()).into();
+    let d = G::ScalarField::rand(&mut rand::thread_rng());
     let r_delta = G::ScalarField::rand(&mut rand::thread_rng()).into();
     let r_beta = G::ScalarField::rand(&mut rand::thread_rng()).into();
     let blinds_vec = {
-      let v1 = (0..2 * n.log_2())
+      (0..2 * n.log_2())
         .map(|_| {
           (
             G::ScalarField::rand(&mut rand::thread_rng()).into(),
             G::ScalarField::rand(&mut rand::thread_rng()).into(),
           )
         })
-        .collect::<Vec<(G::ScalarField, G::ScalarField)>>();
+        .collect::<Vec<(G::ScalarField, G::ScalarField)>>()
     };
 
     let Cx = PedersenCommit::commit_slice(x_vec, blind_x, &gens.gens_n);
@@ -95,17 +95,17 @@ impl<G: CurveGroup> DotProductProofLog<G> {
     let delta = {
       let gens_hat = MultiCommitGens {
         n: 1,
-        G: vec![g_hat],
+        G: vec![g_hat.into_affine()],
         h: gens.gens_1.h,
       };
-      d.commit(&r_delta, &gens_hat).compress()
+      PedersenCommit::commit_scalar(&d, &r_delta, &gens_hat)
     };
-    transcript.append_point(&delta);
+    transcript.append(b"", &delta);
 
-    let beta = d.commit(&r_beta, &gens.gens_1).compress();
-    transcript.append_point(&beta);
+    let beta = PedersenCommit::commit_scalar(&d, &r_beta, &gens.gens_1);
+    transcript.append(b"", &beta);
 
-    let c = transcript.challenge_scalar();
+    let c: G::ScalarField = transcript.challenge_scalar(b"");
 
     let z1 = d + c * y_hat;
     let z2 = a_hat * (c * rhat_Gamma + r_beta) + r_delta;
@@ -140,11 +140,11 @@ impl<G: CurveGroup> DotProductProofLog<G> {
     // Cy.append_to_poseidon( transcript);
     // a.append_to_poseidon( transcript);
 
-    transcript.append_point(Cx);
-    transcript.append_point(Cy);
-    transcript.append_scalar_vector(a);
+    transcript.append(b"", Cx);
+    transcript.append(b"", Cy);
+    transcript.append(b"", &a);
 
-    let Gamma = Cx + Cy;
+    let Gamma = Cx.add(Cy);
 
     let (g_hat, Gamma_hat, a_hat) =
       self
@@ -153,10 +153,10 @@ impl<G: CurveGroup> DotProductProofLog<G> {
     // self.delta.append_to_poseidon( transcript);
     // self.beta.append_to_poseidon( transcript);
 
-    transcript.append_point(&self.delta);
-    transcript.append_point(&self.beta);
+    transcript.append(b"", &self.delta);
+    transcript.append(b"", &self.beta);
 
-    let c = transcript.challenge_scalar();
+    let c = transcript.challenge_scalar(b"");
 
     let c_s = &c;
     let beta_s = self.beta;
@@ -186,6 +186,7 @@ mod tests {
   use super::*;
   use ark_std::UniformRand;
   type F = ark_bls12_377::Fr;
+  type G = ark_bls12_377::G1Projective;
 
   #[test]
   fn check_dotproductproof_log() {
@@ -193,11 +194,11 @@ mod tests {
 
     let n = 1024;
 
-    let gens = DotProductProofGens::new(n, b"test-1024");
+    let gens = DotProductProofGens::<G>::new(n, b"test-1024");
 
     let x: Vec<F> = (0..n).map(|_i| F::rand(&mut rng)).collect();
     let a: Vec<F> = (0..n).map(|_i| F::rand(&mut rng)).collect();
-    let y = DotProductProofLog::compute_dotproduct(&x, &a);
+    let y = crate::dot_product(&x, &a);
 
     let r_x = F::rand(&mut rng);
     let r_y = F::rand(&mut rng);

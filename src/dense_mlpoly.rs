@@ -3,7 +3,7 @@
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::{Transcript, TranscriptWriter};
 
-use super::commitments::{Commitments, MultiCommitGens};
+use super::commitments::{MultiCommitGens, PedersenCommit};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::nizk::{DotProductProofGens, DotProductProofLog};
@@ -322,7 +322,9 @@ impl<F: PrimeField> DensePolynomial<F> {
     assert_eq!(L_size * R_size, self.Z.len());
     let C = (0..L_size)
       .into_par_iter()
-      .map(|i| self.Z[R_size * i..R_size * (i + 1)].commit(&blinds[i], gens))
+      .map(|i| {
+        PedersenCommit::commit_slice(&self.Z[R_size * i..R_size * (i + 1)], &blinds[i], gens)
+      })
       .collect();
     PolyCommitment { C }
   }
@@ -563,9 +565,7 @@ where
     comm: &PolyCommitment<E::G1>,
   ) -> Result<(), ProofVerifyError> {
     // compute a commitment to Zr with a blind of zero
-    let C_Zr = Zr
-      .commit(&E::ScalarField::zero(), &gens.gens.gens_1)
-      .compress();
+    let C_Zr = PedersenCommit::commit_scalar(Zr, &E::ScalarField::zero(), &gens.gens.gens_1);
 
     self.verify(gens, transcript, r, &C_Zr, comm)
   }

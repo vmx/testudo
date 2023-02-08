@@ -10,7 +10,6 @@ use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::{Transcript, TranscriptWriter};
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
-use ark_ff::Field;
 use ark_ff::PrimeField;
 use ark_serialize::*;
 use ark_std::{One, UniformRand, Zero};
@@ -58,9 +57,9 @@ pub struct R1CSCommitment<G: CurveGroup> {
 
 impl<G: CurveGroup> TranscriptWriter for R1CSCommitment<G> {
   fn write_to_transcript(&self, transcript: &mut impl Transcript) {
-    transcript.append(self.num_cons as u64, "");
-    transcript.append(self.num_vars as u64, "");
-    transcript.append(self.num_inputs as u64, "");
+    transcript.append(b"", &self.num_cons as u64);
+    transcript.append(b"", &self.num_vars as u64);
+    transcript.append(b"", &self.num_inputs as u64);
     self.comm.write_to_transcript(transcript);
   }
 }
@@ -188,9 +187,9 @@ impl<F: PrimeField> R1CSInstance<F> {
     };
 
     // three sparse matrices
-    let mut A: Vec<SparseMatEntry> = Vec::new();
-    let mut B: Vec<SparseMatEntry> = Vec::new();
-    let mut C: Vec<SparseMatEntry> = Vec::new();
+    let mut A: Vec<SparseMatEntry<F>> = Vec::new();
+    let mut B: Vec<SparseMatEntry<F>> = Vec::new();
+    let mut C: Vec<SparseMatEntry<F>> = Vec::new();
     let one = F::one();
     for i in 0..num_cons {
       let A_idx = i % size_z;
