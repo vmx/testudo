@@ -136,9 +136,9 @@ impl<G: CurveGroup> DotProductProofLog<G> {
     assert_eq!(a.len(), n);
 
     // transcript.append_protocol_name(DotProductProofLog::protocol_name());
-    // Cx.append_to_poseidon( transcript);
-    // Cy.append_to_poseidon( transcript);
-    // a.append_to_poseidon( transcript);
+    // Cx.write_to_transcript( transcript);
+    // Cy.write_to_transcript( transcript);
+    // a.write_to_transcript( transcript);
 
     transcript.append(b"", Cx);
     transcript.append(b"", Cy);
@@ -150,8 +150,8 @@ impl<G: CurveGroup> DotProductProofLog<G> {
       self
         .bullet_reduction_proof
         .verify(n, a, transcript, &Gamma, &gens.gens_n.G)?;
-    // self.delta.append_to_poseidon( transcript);
-    // self.beta.append_to_poseidon( transcript);
+    // self.delta.write_to_transcript( transcript);
+    // self.beta.write_to_transcript( transcript);
 
     transcript.append(b"", &self.delta);
     transcript.append(b"", &self.beta);
@@ -206,7 +206,7 @@ mod tests {
     let params = poseidon_params();
     let mut prover_transcript = PoseidonTranscript::new(&params);
     let (proof, Cx, Cy) =
-      DotProductProofLog::prove(&gens, &mut prover_transcript, &x, &r_x, &a, &y, &r_y);
+      DotProductProofLog::<G>::prove(&gens, &mut prover_transcript, &x, &r_x, &a, &y, &r_y);
 
     let mut verifier_transcript = PoseidonTranscript::new(&params);
     assert!(proof

@@ -60,7 +60,7 @@ where
     Ok(self.sponge.squeeze_field_elements(1).unwrap().remove(0))
   }
 
-  fn challenge_vector(&mut self, len: usize) -> Result<Vec<FpVar<F>>, SynthesisError> {
+  fn challenge_scalar_vec(&mut self, len: usize) -> Result<Vec<FpVar<F>>, SynthesisError> {
     let c_vars = self.sponge.squeeze_field_elements(len).unwrap();
     Ok(c_vars)
   }
@@ -302,7 +302,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
     let num_rounds_x = self.num_cons.log_2();
     let _num_rounds_y = (2 * self.num_vars).log_2();
 
-    let tau_vars = transcript_var.challenge_vector(num_rounds_x)?;
+    let tau_vars = transcript_var.challenge_scalar_vec(num_rounds_x)?;
 
     let claim_phase1_var = FpVar::<F>::new_witness(cs.clone(), || Ok(F::zero()))?;
 

@@ -4,6 +4,8 @@ use ark_crypto_primitives::sponge::{
   CryptographicSponge,
 };
 use ark_ff::PrimeField;
+use ark_ec::pairing::Pairing;
+use ark_poly_commit::multilinear_pc::data_structures::Commitment;
 use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
 #[derive(Clone)]

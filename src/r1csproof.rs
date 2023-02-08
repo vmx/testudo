@@ -146,7 +146,7 @@ impl<E: Pairing> R1CSProof<E> {
     t.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
     transcript.append(b"", &bytes);
 
-    // comm.append_to_poseidon(transcript);
+    // comm.write_to_transcript(transcript);
     timer_commit.stop();
 
     let c = transcript.challenge_scalar(b"");
@@ -175,7 +175,7 @@ impl<E: Pairing> R1CSProof<E> {
     let (mut poly_Az, mut poly_Bz, mut poly_Cz) =
       inst.multiply_vec(inst.get_num_cons(), z.len(), &z);
 
-    let (sc_proof_phase1, rx, _claims_phase1) = R1CSProof::prove_phase_one(
+    let (sc_proof_phase1, rx, _claims_phase1) = R1CSProof::<E>::prove_phase_one(
       num_rounds_x,
       &mut poly_tau,
       &mut poly_Az,
@@ -218,7 +218,7 @@ impl<E: Pairing> R1CSProof<E> {
     };
 
     // another instance of the sum-check protocol
-    let (sc_proof_phase2, ry, _claims_phase2) = R1CSProof::prove_phase_two(
+    let (sc_proof_phase2, ry, _claims_phase2) = R1CSProof::<E>::prove_phase_two(
       num_rounds_y,
       &claim_phase2,
       &mut DensePolynomial::new(z),
@@ -325,26 +325,27 @@ impl<E: Pairing> R1CSProof<E> {
 
     let prove_outer = Timer::new("provecircuit");
     let start = Instant::now();
-    let proof = Groth16::<I>::prove(&pk, circuit, &mut rand::thread_rng()).unwrap();
+    let proof = Groth16::<E>::prove(&pk, circuit, &mut rand::thread_rng()).unwrap();
     let dp = start.elapsed().as_millis();
     prove_outer.stop();
 
+    let timer_verification = Timer::new("verification");
     let start = Instant::now();
-    let verifier_time = Timer::new("groth16_verification");
+
     let (v_A, v_B, v_C, v_AB) = self.claims_phase2;
+
     let mut pubs = vec![];
     pubs.extend(self.ry.clone());
     pubs.extend(vec![self.eval_vars_at_ry, self.transcript_sat_state]);
-    let is_verified = Groth16::<I>::verify(&vk, &pubs, &proof).unwrap();
-    assert!(is_verified);
-    verifier_time.stop();
 
-    let timer_verification = Timer::new("commitverification");
     transcript.new_from_state(&self.transcript_sat_state);
+    par! {
+      // verifies the Groth16 proof for the spartan verifier
+      let is_verified = Groth16::<E>::verify(&vk, &pubs, &proof).unwrap(),
 
-    // Verifies the proof of opening against the result of evaluating the
-    // witness polynomial at point ry.
-    let res = Polynomial::verify(
+      // verifies the proof of opening against the result of evaluating the
+      // witness polynomial at point ry
+      let res = Polynomial::verify(
       transcript,
       &gens.gens_pc.vk,
       &self.comm,
@@ -353,11 +354,12 @@ impl<E: Pairing> R1CSProof<E> {
       &self.proof_eval_vars_at_ry,
       &self.mipp_proof,
       &self.t,
-    );
-
-    timer_verification.stop();
-    assert!(res == true);
+    )
+    };
     let dv = start.elapsed().as_millis();
+    timer_verification.stop();
+
+    assert!(res == true && is_verified == true);
 
     Ok((ds, dp, dv))
   }
@@ -372,6 +374,7 @@ impl<E: Pairing> R1CSProof<E> {
     evals: &(E::ScalarField, E::ScalarField, E::ScalarField),
     transcript: &mut PoseidonTranscript<E::ScalarField>,
     _gens: &R1CSGens<E>,
+    poseidon: PoseidonConfig<E::ScalarField>,
   ) -> Result<usize, ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
     let mut bytes = Vec::new();
@@ -379,16 +382,16 @@ impl<E: Pairing> R1CSProof<E> {
       .t
       .serialize_with_mode(&mut bytes, Compress::Yes)
       .unwrap();
-    transcript.append_bytes(&bytes);
+    transcript.append(b"", &bytes);
 
-    let c = transcript.challenge_scalar();
+    let c: E::ScalarField = transcript.challenge_scalar(b"");
 
     let mut input_as_sparse_poly_entries = vec![SparsePolyEntry::new(0, E::ScalarField::one())];
     //remaining inputs
     input_as_sparse_poly_entries.extend(
       (0..input.len())
         .map(|i| SparsePolyEntry::new(i + 1, input[i]))
-        .collect::<Vec<SparsePolyEntry>>(),
+        .collect::<Vec<SparsePolyEntry<E::ScalarField>>>(),
     );
 
     let n = num_vars;
@@ -400,7 +403,7 @@ impl<E: Pairing> R1CSProof<E> {
       num_cons,
       input: input.to_vec(),
       evals: *evals,
-      params: poseidon_params(),
+      params: poseidon,
       prev_challenge: c,
       claims_phase2: self.claims_phase2,
       polys_sc1: self.sc_proof_phase1.polys.clone(),
@@ -515,7 +518,7 @@ mod tests {
 
   #[test]
   fn test_synthetic_r1cs() {
-    let (inst, vars, input) = R1CSInstance::produce_synthetic_r1cs(1024, 1024, 10);
+    let (inst, vars, input) = R1CSInstance::<F>::produce_synthetic_r1cs(1024, 1024, 10);
     let is_sat = inst.is_sat(&vars, &input);
     assert!(is_sat);
   }
@@ -525,9 +528,10 @@ mod tests {
     let num_vars = 16;
     let num_cons = num_vars;
     let num_inputs = 3;
-    let (inst, vars, input) = R1CSInstance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
+    let (inst, vars, input) =
+      R1CSInstance::<F>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
 
-    let gens = R1CSGens::new(b"test-m", num_cons, num_vars);
+    let gens = R1CSGens::<E>::new(b"test-m", num_cons, num_vars);
 
     let params = poseidon_params();
     // let mut random_tape = RandomTape::new(b"proof");
@@ -550,6 +554,7 @@ mod tests {
         &inst_evals,
         &mut verifier_transcript,
         &gens,
+        poseidon_params()
       )
       .is_ok());
   }

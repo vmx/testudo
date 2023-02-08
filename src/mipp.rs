@@ -1,3 +1,6 @@
+use crate::constraints::PoseidonTranscripVar;
+use crate::poseidon_transcript::PoseidonTranscript;
+use crate::transcript::Transcript;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::CurveGroup;
 use ark_ec::{pairing::Pairing, AffineRepr};
@@ -8,7 +11,6 @@ use ark_poly_commit::multilinear_pc::data_structures::{
 };
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError, Write};
-use crate::transcript::Transcript;
 use ark_std::One;
 use ark_std::Zero;
 use rayon::iter::ParallelIterator;
@@ -27,8 +29,8 @@ pub struct MippProof<E: Pairing> {
 }
 
 impl<E: Pairing> MippProof<E> {
-  pub fn prove<T: Transcript>(
-    transcript: &mut impl Transcript,
+  pub fn prove(
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
     ck: &CommitterKey<E>,
     a: Vec<E::G1Affine>,
     y: Vec<E::ScalarField>,
@@ -72,20 +74,19 @@ impl<E: Pairing> MippProof<E> {
       let (_rh_l, _rh_r) = (&h_l, &h_r);
       let (ra_l, ra_r) = (&a_l, &a_r);
       let (ry_l, ry_r) = (&y_l, &y_r);
-      // See section 3.3 for paper version with equivalent names
-      try_par! {
-      // MIPP part
-      // Compute cross commitments
-      // u_l = a[n':] ^ y[:n']
-      // TODO to replace by bitsf_multiexp
-      let comm_u_l = multiexponentiation(ra_l, &ry_r),
-      // u_r = a[:n'] ^ y[n':]
-      let comm_u_r = multiexponentiation(ra_r, &ry_l)
-         // Compute the cross pairing products over the distinct halfs of A
 
-        };
+      try_par! {
+       // MIPP part
+       // Compute cross commitments
+       // u_l = a[n':] ^ y[:n']
+       // TODO to replace by bitsf_multiexp
+       let comm_u_l = multiexponentiation(ra_l, &ry_r),
+       // u_r = a[:n'] ^ y[n':]
+       let comm_u_r = multiexponentiation(ra_r, &ry_l)
+      };
 
       par! {
+        // Compute the cross pairing products over the distinct halfs of A
         // t_l = a[n':] * h[:n']
         let comm_t_l = pairings_product::<E>(&a_l, h_r),
         // t_r = a[:n'] * h[n':]
@@ -105,7 +106,7 @@ impl<E: Pairing> MippProof<E> {
       // can't control bit size of c_inv
       let c = c_inv.inverse().unwrap();
 
-      // Set up values for next step of recursion
+      // Set up values for next step of recursion by compressing as follows
       // a[n':] + a[:n']^x
       compress(&mut m_a, split, &c);
       // y[n':] + y[:n']^x_inv
@@ -124,8 +125,8 @@ impl<E: Pairing> MippProof<E> {
     let final_a = m_a[0];
     let final_h = m_h[0];
 
-    // get the structured polynomial f_h for which final_h = h^f_h(vec{t})
-    // is the PST commitment given generator h and toxic waste t
+    // get the structured polynomial p_h for which final_h = h^p_h(vec{t})
+    // is the PST commitment given generator h and toxic waste \vec{t}
     let poly = DenseMultilinearExtension::<E::ScalarField>::from_evaluations_vec(
       xs_inv.len(),
       Self::polynomial_evaluations_from_transcript::<E::ScalarField>(&xs_inv),
@@ -133,7 +134,8 @@ impl<E: Pairing> MippProof<E> {
     let c = MultilinearPC::<E>::commit_g2(ck, &poly);
     debug_assert!(c.h_product == final_h);
 
-    // generate a proof of opening final_h at a random  point
+    // generate a proof of opening final_h at the random point rs
+    // from the transcript
     let rs: Vec<E::ScalarField> = (0..poly.num_vars)
       .into_iter()
       .map(|_| transcript.challenge_scalar::<E::ScalarField>(b"random_point"))
@@ -150,7 +152,7 @@ impl<E: Pairing> MippProof<E> {
     })
   }
 
-  // builds the polynomial f_h in Lagrange basis which uses the
+  // builds the polynomial p_h in Lagrange basis which uses the
   // inverses of transcript challenges this is the following
   // structured polynomial $\prod_i(1 - z_i + cs_inv[m - i  - 1] * z_i)$
   // where m is the length of cs_inv and z_i is the unknown
@@ -158,14 +160,15 @@ impl<E: Pairing> MippProof<E> {
     let m = cs_inv.len();
     let pow_m = 2_usize.pow(m as u32);
 
-    // Constructs the list of evaluations over the boolean hypercube
+    // constructs the list of evaluations over the boolean hypercube \{0,1\}^m
     let evals = (0..pow_m)
       .into_par_iter()
       .map(|i| {
         let mut res = F::one();
         for j in 0..m {
-          // We iterate (m - 1)th bit to 0th bit and, in case the bit is 1
-          // we multiply by the corresponding challenge.
+          // we iterate from lsb to msb and, in case the bit is 1,
+          // we multiply by the corresponding challenge i.e whose
+          // index corresponds to the bit's position
           if (i >> j) & 1 == 1 {
             res *= cs_inv[m - j - 1];
           }
@@ -176,9 +179,9 @@ impl<E: Pairing> MippProof<E> {
     evals
   }
 
-  pub fn verify<T: Transcript>(
+  pub fn verify(
     vk: &VerifierKey<E>,
-    transcript: &mut impl Transcript,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
     proof: &MippProof<E>,
     point: Vec<E::ScalarField>,
     U: &E::G1Affine,
@@ -215,8 +218,8 @@ impl<E: Pairing> MippProof<E> {
       xs.push(c);
       xs_inv.push(c_inv);
 
-      // the verifier computes the final_y by themselves given
-      // it's field operations so quite fast and parallelisation
+      // the verifier computes the final_y by themselves because
+      // this is field operations so it's quite fast and parallelisation
       // doesn't bring much improvement
       final_y *= E::ScalarField::one() + c_inv.mul(point[i]) - point[i];
     }
@@ -267,26 +270,31 @@ impl<E: Pairing> MippProof<E> {
     let ref_final_res = &mut final_res;
     ref_final_res.merge(&res);
 
-    let mut point: Vec<E::ScalarField> = Vec::new();
+    // get the point rs from the transcript, used by the prover to generate
+    // the PST proof
+    let mut rs: Vec<E::ScalarField> = Vec::new();
     let m = xs_inv.len();
     for _i in 0..m {
       let r = transcript.challenge_scalar::<E::ScalarField>(b"random_point");
-      point.push(r);
+      rs.push(r);
     }
 
-    // Given f_h is structured, the verifier can compute it's evaluation at
-    // the random point point in O(m) time by themselves and use a PST
-    // verification to ensure final_h is well formed.
+    // Given p_h is structured as defined above, the verifier can compute
+    // p_h(rs) by themselves in O(m) time
     let v = (0..m)
       .into_par_iter()
-      .map(|i| E::ScalarField::one() + point[i].mul(xs_inv[m - i - 1]) - point[i])
+      .map(|i| E::ScalarField::one() + rs[i].mul(xs_inv[m - i - 1]) - rs[i])
       .product();
 
     let comm_h = CommitmentG2 {
       nv: m,
       h_product: proof.final_h,
     };
-    let check_h = MultilinearPC::<E>::check_2(vk, &comm_h, &point, v, &proof.pst_proof_h);
+
+    // final_h is the commitment of p_h so the verifier can perform
+    // a PST verification at the random point rs, given the pst proof
+    // received from the prover prover
+    let check_h = MultilinearPC::<E>::check_2(vk, &comm_h, &rs, v, &proof.pst_proof_h);
 
     let final_u = proof.final_a.mul(final_y);
     let final_t: <E as Pairing>::TargetField = E::pairing(proof.final_a, proof.final_h).0;
@@ -374,15 +382,6 @@ pub fn multiexponentiation<G: AffineRepr>(
 }
 
 pub fn pairings_product<E: Pairing>(gs: &[E::G1Affine], hs: &[E::G2Affine]) -> E::TargetField {
-  //let pairings: Vec<_> = gs
-  //  .into_par_iter()
-  //  .map(|g| <E as Pairing>::G1Prepared::from(*g))
-  //  .zip(
-  //    hs.into_par_iter()
-  //      .map(|h| <E as Pairing>::G2Prepared::from(*h)),
-  //  )
-  //  .collect();
-
   E::multi_pairing(gs, hs).0
 }
 

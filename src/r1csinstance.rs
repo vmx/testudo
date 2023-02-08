@@ -57,9 +57,9 @@ pub struct R1CSCommitment<G: CurveGroup> {
 
 impl<G: CurveGroup> TranscriptWriter for R1CSCommitment<G> {
   fn write_to_transcript(&self, transcript: &mut impl Transcript) {
-    transcript.append(b"", &self.num_cons as u64);
-    transcript.append(b"", &self.num_vars as u64);
-    transcript.append(b"", &self.num_inputs as u64);
+    transcript.append(b"", &(self.num_cons as u64));
+    transcript.append(b"", &(self.num_vars as u64));
+    transcript.append(b"", &(self.num_inputs as u64));
     self.comm.write_to_transcript(transcript);
   }
 }

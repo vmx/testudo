@@ -45,7 +45,7 @@ impl<F: PrimeField> SumcheckInstanceProof<F> {
       assert_eq!(poly.eval_at_zero() + poly.eval_at_one(), e);
 
       // append the prover's message to the transcript
-      poly.append_to_poseidon(transcript);
+      poly.write_to_transcript(transcript);
 
       //derive the verifier's challenge for the next round
       let r_i = transcript.challenge_scalar();
@@ -225,12 +225,7 @@ impl<F: PrimeField> SumcheckInstanceProof<F> {
     coeffs: &[F],
     comb_func: C,
     transcript: &mut PoseidonTranscript<F>,
-  ) -> (
-    Self,
-    Vec<F>,
-    (Vec<F>, Vec<F>, F),
-    (Vec<F>, Vec<F>, Vec<F>),
-  )
+  ) -> (Self, Vec<F>, (Vec<F>, Vec<F>, F), (Vec<F>, Vec<F>, Vec<F>))
   where
     C: Fn(&F, &F, &F) -> F,
   {

@@ -50,10 +50,7 @@ pub struct DerefsCommitment<G: CurveGroup> {
 }
 
 impl<F: PrimeField> Derefs<F> {
-  pub fn new(
-    row_ops_val: Vec<DensePolynomial<F>>,
-    col_ops_val: Vec<DensePolynomial<F>>,
-  ) -> Self {
+  pub fn new(row_ops_val: Vec<DensePolynomial<F>>, col_ops_val: Vec<DensePolynomial<F>>) -> Self {
     assert_eq!(row_ops_val.len(), col_ops_val.len());
 
     let derefs = {
@@ -70,7 +67,10 @@ impl<F: PrimeField> Derefs<F> {
     derefs
   }
 
-  pub fn commit<E>(&self, gens: &PolyCommitmentGens<E>) -> DerefsCommitment<E::G1> where E: Pairing<ScalarField = F>{
+  pub fn commit<E>(&self, gens: &PolyCommitmentGens<E>) -> DerefsCommitment<E::G1>
+  where
+    E: Pairing<ScalarField = F>,
+  {
     let (comm_ops_val, _blinds) = self.comb.commit(gens);
     DerefsCommitment { comm_ops_val }
   }
@@ -97,11 +97,11 @@ impl<E: Pairing> DerefsEvalProof<E> {
 
     // append the claimed evaluations to transcript
     // evals.append_to_transcript(b"evals_ops_val", transcript);
-    transcript.append_scalar_vector(&evals);
+    transcript.append(b"", &evals);
 
     // n-to-1 reduction
     let (r_joint, eval_joint) = {
-      let challenges = transcript.challenge_vector(evals.len().log_2());
+      let challenges = transcript.challenge_scalar_vec(b"", evals.len().log_2());
       let mut poly_evals = DensePolynomial::new(evals);
       for i in (0..challenges.len()).rev() {
         poly_evals.bound_poly_var_bot(&challenges[i]);
@@ -115,7 +115,7 @@ impl<E: Pairing> DerefsEvalProof<E> {
       (r_joint, joint_claim_eval)
     };
     // decommit the joint polynomial at r_joint
-    transcript.append_scalar(&eval_joint);
+    transcript.append(b"", &eval_joint);
     let (proof_derefs, _comm_derefs_eval) = PolyEvalProof::prove(
       joint_poly,
       None,
@@ -161,10 +161,10 @@ impl<E: Pairing> DerefsEvalProof<E> {
   ) -> Result<(), ProofVerifyError> {
     // append the claimed evaluations to transcript
     // evals.append_to_transcript(b"evals_ops_val", transcript);
-    transcript.append_scalar_vector(&evals);
+    transcript.append(b"", &evals);
 
     // n-to-1 reduction
-    let challenges = transcript.challenge_vector(evals.len().log_2());
+    let challenges = transcript.challenge_scalar_vec(b"", evals.len().log_2());
     let mut poly_evals = DensePolynomial::new(evals);
     for i in (0..challenges.len()).rev() {
       poly_evals.bound_poly_var_bot(&challenges[i]);
@@ -176,7 +176,7 @@ impl<E: Pairing> DerefsEvalProof<E> {
 
     // decommit the joint polynomial at r_joint
     // joint_claim_eval.append_to_transcript(b"joint_claim_eval", transcript);
-    transcript.append_scalar(&joint_claim_eval);
+    transcript.append(b"", &joint_claim_eval);
 
     proof.verify_plain(gens, transcript, &r_joint, &joint_claim_eval, comm)
   }
@@ -328,9 +328,9 @@ pub struct SparseMatPolyCommitment<G: CurveGroup> {
 
 impl<G: CurveGroup> TranscriptWriter for SparseMatPolyCommitment<G> {
   fn write_to_transcript(&self, transcript: &mut impl Transcript) {
-    transcript.append(self.batch_size as u64, "");
-    transcript.append(self.num_ops as u64, "");
-    transcript.append(self.num_mem_cells as u64, "");
+    transcript.append(b"", &(self.batch_size as u64));
+    transcript.append(b"", &(self.num_ops as u64));
+    transcript.append(b"", &(self.num_mem_cells as u64));
     self.comm_comb_ops.write_to_transcript(transcript);
     self.comm_comb_mem.write_to_transcript(transcript);
   }
@@ -619,7 +619,7 @@ impl<F: PrimeField> Layers<F> {
     let prod_init = ProductCircuit::new(&poly_init_hashed);
     let prod_read_vec = (0..poly_read_hashed_vec.len())
       .map(|i| ProductCircuit::new(&poly_read_hashed_vec[i]))
-      .collect::<Vec<ProductCircuit>>();
+      .collect::<Vec<ProductCircuit<F>>>();
     let prod_write_vec = (0..poly_write_hashed_vec.len())
       .map(|i| ProductCircuit::new(&poly_write_hashed_vec[i]))
       .collect::<Vec<ProductCircuit<F>>>();
@@ -762,8 +762,8 @@ impl<E: Pairing> HashLayerProof<E> {
     evals_ops.extend(&eval_col_read_ts_vec);
     evals_ops.extend(&eval_val_vec);
     evals_ops.resize(evals_ops.len().next_power_of_two(), E::ScalarField::zero());
-    transcript.append_scalar_vector(&evals_ops);
-    let challenges_ops = transcript.challenge_vector(evals_ops.len().log_2());
+    transcript.append(b"", &evals_ops);
+    let challenges_ops = transcript.challenge_scalar_vec(b"", evals_ops.len().log_2());
 
     let mut poly_evals_ops = DensePolynomial::new(evals_ops);
     for i in (0..challenges_ops.len()).rev() {
@@ -774,7 +774,7 @@ impl<E: Pairing> HashLayerProof<E> {
     let mut r_joint_ops = challenges_ops;
     r_joint_ops.extend(rand_ops);
     debug_assert_eq!(dense.comb_ops.evaluate(&r_joint_ops), joint_claim_eval_ops);
-    transcript.append_scalar(&joint_claim_eval_ops);
+    transcript.append(b"", &joint_claim_eval_ops);
     let (proof_ops, _comm_ops_eval) = PolyEvalProof::prove(
       &dense.comb_ops,
       None,
@@ -788,8 +788,8 @@ impl<E: Pairing> HashLayerProof<E> {
     // form a single decommitment using comb_comb_mem at rand_mem
     let evals_mem: Vec<E::ScalarField> = vec![eval_row_audit_ts, eval_col_audit_ts];
     // evals_mem.append_to_transcript(b"claim_evals_mem", transcript);
-    transcript.append_scalar_vector(&evals_mem);
-    let challenges_mem = transcript.challenge_vector(evals_mem.len().log_2());
+    transcript.append(&evals_mem);
+    let challenges_mem = transcript.challenge_scalar_vec(b"", evals_mem.len().log_2());
 
     let mut poly_evals_mem = DensePolynomial::new(evals_mem);
     for i in (0..challenges_mem.len()).rev() {
@@ -800,7 +800,7 @@ impl<E: Pairing> HashLayerProof<E> {
     let mut r_joint_mem = challenges_mem;
     r_joint_mem.extend(rand_mem);
     debug_assert_eq!(dense.comb_mem.evaluate(&r_joint_mem), joint_claim_eval_mem);
-    transcript.append_scalar(&joint_claim_eval_mem);
+    transcript.append(b"", &joint_claim_eval_mem);
     let (proof_mem, _comm_mem_eval) = PolyEvalProof::prove(
       &dense.comb_mem,
       None,
@@ -945,9 +945,9 @@ impl<E: Pairing> HashLayerProof<E> {
     evals_ops.extend(eval_col_read_ts_vec);
     evals_ops.extend(eval_val_vec);
     evals_ops.resize(evals_ops.len().next_power_of_two(), E::ScalarField::zero());
-    transcript.append_scalar_vector(&evals_ops);
+    transcript.append(b"", &evals_ops);
     // evals_ops.append_to_transcript(b"claim_evals_ops", transcript);
-    let challenges_ops = transcript.challenge_vector(evals_ops.len().log_2());
+    let challenges_ops = transcript.challenge_scalar_vec(b"", evals_ops.len().log_2());
 
     let mut poly_evals_ops = DensePolynomial::new(evals_ops);
     for i in (0..challenges_ops.len()).rev() {
@@ -957,7 +957,7 @@ impl<E: Pairing> HashLayerProof<E> {
     let joint_claim_eval_ops = poly_evals_ops[0];
     let mut r_joint_ops = challenges_ops;
     r_joint_ops.extend(rand_ops);
-    transcript.append_scalar(&joint_claim_eval_ops);
+    transcript.append(b"", &joint_claim_eval_ops);
     assert!(self
       .proof_ops
       .verify_plain(
@@ -973,8 +973,8 @@ impl<E: Pairing> HashLayerProof<E> {
     // form a single decommitment using comb_comb_mem at rand_mem
     let evals_mem: Vec<E::ScalarField> = vec![*eval_row_audit_ts, *eval_col_audit_ts];
     // evals_mem.append_to_transcript(b"claim_evals_mem", transcript);
-    transcript.append_scalar_vector(&evals_mem);
-    let challenges_mem = transcript.challenge_vector(evals_mem.len().log_2());
+    transcript.append(b"", &evals_mem);
+    let challenges_mem = transcript.challenge_scalar_vec(b"", evals_mem.len().log_2());
 
     let mut poly_evals_mem = DensePolynomial::new(evals_mem);
     for i in (0..challenges_mem.len()).rev() {
@@ -985,7 +985,7 @@ impl<E: Pairing> HashLayerProof<E> {
     let mut r_joint_mem = challenges_mem;
     r_joint_mem.extend(rand_mem);
     // joint_claim_eval_mem.append_to_transcript(b"joint_claim_eval_mem", transcript);
-    transcript.append_scalar(&joint_claim_eval_mem);
+    transcript.append(b"",&joint_claim_eval_mem);
     self.proof_mem.verify_plain(
       &gens.gens_mem,
       transcript,
@@ -1066,10 +1066,10 @@ impl<F: PrimeField> ProductLayerProof<F> {
     let rs: F = (0..row_eval_read.len()).map(|i| row_eval_read[i]).product();
     assert_eq!(row_eval_init * ws, rs * row_eval_audit);
 
-    transcript.append_scalar(&row_eval_init);
-    transcript.append_scalar_vector(&row_eval_read);
-    transcript.append_scalar_vector(&row_eval_write);
-    transcript.append_scalar(&row_eval_audit);
+    transcript.append(b"",&row_eval_init);
+    transcript.append(b"", &row_eval_read);
+    transcript.append(b""; &row_eval_write);
+    transcript.append(b"", &row_eval_audit);
 
     let col_eval_init = col_prod_layer.init.evaluate();
     let col_eval_audit = col_prod_layer.audit.evaluate();
@@ -1087,10 +1087,10 @@ impl<F: PrimeField> ProductLayerProof<F> {
     let rs: F = (0..col_eval_read.len()).map(|i| col_eval_read[i]).product();
     assert_eq!(col_eval_init * ws, rs * col_eval_audit);
 
-    transcript.append_scalar(&col_eval_init);
-    transcript.append_scalar_vector(&col_eval_read);
-    transcript.append_scalar_vector(&col_eval_write);
-    transcript.append_scalar(&col_eval_audit);
+    transcript.append(&col_eval_init);
+    transcript.append(&col_eval_read);
+    transcript.append(&col_eval_write);
+    transcript.append(&col_eval_audit);
 
     // prepare dotproduct circuit for batching then with ops-related product circuits
     assert_eq!(eval.len(), derefs.row_ops_val.len());
@@ -1115,8 +1115,8 @@ impl<F: PrimeField> ProductLayerProof<F> {
 
       // eval_dotp_left.append_to_transcript(b"claim_eval_dotp_left", transcript);
       // eval_dotp_right.append_to_transcript(b"claim_eval_dotp_right", transcript);
-      transcript.append_scalar(&eval_dotp_left);
-      transcript.append_scalar(&eval_dotp_right);
+      transcript.append(&eval_dotp_left);
+      transcript.append(&eval_dotp_right);
       assert_eq!(eval_dotp_left + eval_dotp_right, eval[i]);
       eval_dotp_left_vec.push(eval_dotp_left);
       eval_dotp_right_vec.push(eval_dotp_right);
@@ -1252,10 +1252,10 @@ impl<F: PrimeField> ProductLayerProof<F> {
     // row_eval_write.append_to_transcript(b"claim_row_eval_write", transcript);
     // row_eval_audit.append_to_transcript(b"claim_row_eval_audit", transcript);
 
-    transcript.append_scalar(row_eval_init);
-    transcript.append_scalar_vector(row_eval_read);
-    transcript.append_scalar_vector(row_eval_write);
-    transcript.append_scalar(row_eval_audit);
+    transcript.append(row_eval_init);
+    transcript.append(row_eval_read);
+    transcript.append(row_eval_write);
+    transcript.append(row_eval_audit);
 
     // subset check
     let (col_eval_init, col_eval_read, col_eval_write, col_eval_audit) = &self.eval_col;
@@ -1272,10 +1272,10 @@ impl<F: PrimeField> ProductLayerProof<F> {
     // col_eval_write.append_to_transcript(b"claim_col_eval_write", transcript);
     // col_eval_audit.append_to_transcript(b"claim_col_eval_audit", transcript);
 
-    transcript.append_scalar(col_eval_init);
-    transcript.append_scalar_vector(col_eval_read);
-    transcript.append_scalar_vector(col_eval_write);
-    transcript.append_scalar(col_eval_audit);
+    transcript.append(b"", col_eval_init);
+    transcript.append(b"", col_eval_read);
+    transcript.append(b"", col_eval_write);
+    transcript.append(b"", col_eval_audit);
 
     // verify the evaluation of the sparse polynomial
     let (eval_dotp_left, eval_dotp_right) = &self.eval_val;
@@ -1286,8 +1286,8 @@ impl<F: PrimeField> ProductLayerProof<F> {
       assert_eq!(eval_dotp_left[i] + eval_dotp_right[i], eval[i]);
       // eval_dotp_left[i].append_to_transcript(b"claim_eval_dotp_left", transcript);
       // eval_dotp_right[i].append_to_transcript(b"claim_eval_dotp_right", transcript)
-      transcript.append_scalar(&eval_dotp_left[i]);
-      transcript.append_scalar(&eval_dotp_right[i]);
+      transcript.append(b"", &eval_dotp_left[i]);
+      transcript.append(b"", &eval_dotp_right[i]);
 
       claims_dotp_circuit.push(eval_dotp_left[i]);
       claims_dotp_circuit.push(eval_dotp_right[i]);
@@ -1487,14 +1487,14 @@ impl<E: Pairing> SparseMatPolyEvalProof<E> {
     let timer_commit = Timer::new("commit_nondet_witness");
     let comm_derefs = {
       let comm = derefs.commit(&gens.gens_derefs);
-      comm.append_to_poseidon(transcript);
+      comm.write_to_transcript(transcript);
       comm
     };
     timer_commit.stop();
 
     let poly_eval_network_proof = {
       // produce a random element from the transcript for hash function
-      let r_mem_check = transcript.challenge_vector(2);
+      let r_mem_check = transcript.challenge_scalar_vec(b"", 2);
 
       // build a network to evaluate the sparse polynomial
       let timer_build_network = Timer::new("build_layered_network");
@@ -1539,10 +1539,10 @@ impl<E: Pairing> SparseMatPolyEvalProof<E> {
     assert_eq!(rx_ext.len().pow2(), num_mem_cells);
 
     // add claims to transcript and obtain challenges for randomized mem-check circuit
-    self.comm_derefs.append_to_poseidon(transcript);
+    self.comm_derefs.write_to_transcript(transcript);
 
     // produce a random element from the transcript for hash function
-    let r_mem_check = transcript.challenge_vector(2);
+    let r_mem_check = transcript.challenge_scalar_vec(b"", 2);
 
     self.poly_eval_network_proof.verify(
       comm,
@@ -1629,7 +1629,7 @@ mod tests {
     let num_vars_x: usize = num_rows.log_2();
     let num_vars_y: usize = num_cols.log_2();
 
-    let mut M: Vec<SparseMatEntry> = Vec::new();
+    let mut M: Vec<SparseMatEntry<F>> = Vec::new();
 
     for _i in 0..num_nz_entries {
       M.push(SparseMatEntry::new(

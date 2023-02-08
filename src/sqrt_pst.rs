@@ -5,6 +5,7 @@ use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
 };
+use std::ops::Mul;
 
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
@@ -22,9 +23,9 @@ pub struct Polynomial<E: Pairing> {
 impl<E: Pairing> Polynomial<E> {
   // Given the evaluations over the boolean hypercube of a polynomial p of size
   // 2*m compute the sqrt-sized polynomials p_i as
-  // p_i(Y) = \sum_{j \in \{0,1\}^m} p(j, i) * chi_j(Y)
-  // where p(X,Y) = \sum_{i \in \{0,\1}^m} chi_i(X) * p_i(Y)
-  //
+  // p_i(X) = \sum_{j \in \{0,1\}^m} p(j, i) * chi_j(X)
+  // where p(X,Y) = \sum_{i \in \{0,\1}^m}
+  //  (\sum_{j \in \{0, 1\}^{m}} p(j, i) * \chi_j(X)) * \chi_i(Y)
   // TODO: add case when the length of the list is not an even power of 2
   pub fn from_evaluations(Z: &[E::ScalarField]) -> Self {
     let pl_timer = Timer::new("poly_list_build");
@@ -38,7 +39,7 @@ impl<E: Pairing> Polynomial<E> {
         let z: Vec<E::ScalarField> = (0..pow_m)
           .into_par_iter()
           // viewing the list of evaluation as a square matrix
-          // we select by row i and column j
+          // we select by row j and column i
           .map(|j| Z[(j << m) | i])
           .collect();
         DensePolynomial::new(z)
@@ -89,11 +90,10 @@ impl<E: Pairing> Polynomial<E> {
       self.get_q(point);
     }
     let q = self.q.clone().unwrap();
-    let prods = (0..q.Z.len())
+    (0..q.Z.len())
       .into_par_iter()
-      .map(|j| q.Z[j] * Polynomial::get_chi_i(&a, j));
-
-    prods.sum()
+      .map(|j| q.Z[j].mul(Polynomial::get_chi_i(&a, j)))
+      .sum()
   }
 
   pub fn commit(&self, ck: &CommitterKey<E>) -> (Vec<Commitment<E>>, E::TargetField) {
@@ -138,7 +138,8 @@ impl<E: Pairing> Polynomial<E> {
     let mut prod = E::ScalarField::one();
     for j in 0..m {
       let b_j = b[j];
-      // iterate from msb to lsb of i to build chi_i as defined above
+      // iterate from first (msb) to last (lsb) bit of i
+      // to build chi_i using the formula above
       if i >> (m - j - 1) & 1 == 1 {
         prod = prod * b_j;
       } else {
@@ -167,8 +168,8 @@ impl<E: Pairing> Polynomial<E> {
     let timer_open = Timer::new("sqrt_open");
 
     // Compute the PST commitment to q obtained as the inner products of the
-    // commitments to the polynomials p_i and chi_i(a) for i ranging over the
-    // boolean hypercube of size m.
+    // commitments to the polynomials p_i and chi_i(\vec{b}) for i ranging over
+    // the boolean hypercube of size m.
     let _m = a.len();
     let timer_msm = Timer::new("msm");
     if self.chis_b.is_none() {
@@ -178,9 +179,9 @@ impl<E: Pairing> Polynomial<E> {
     let chis = self.chis_b.clone().unwrap();
     assert!(chis.len() == comm_list.len());
 
-    let a_vec: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
+    let comms: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
 
-    let c_u = <E::G1 as VariableBaseMSM>::msm_unchecked(&a_vec, chis.as_slice()).into_affine();
+    let c_u = <E::G1 as VariableBaseMSM>::msm_unchecked(&comms, &chis).into_affine();
     timer_msm.stop();
 
     let U: Commitment<E> = Commitment {
@@ -195,10 +196,14 @@ impl<E: Pairing> Polynomial<E> {
     // and the vector y, where A is the opening vector to T
     let timer_mipp_proof = Timer::new("mipp_prove");
     let mipp_proof =
-      MippProof::<E>::prove(transcript, ck, a_vec, chis.to_vec(), h_vec, &c_u, t).unwrap();
+      MippProof::<E>::prove(transcript, ck, comms, chis.to_vec(), h_vec, &c_u, t).unwrap();
     timer_mipp_proof.stop();
 
     let timer_proof = Timer::new("pst_open");
+
+    // reversing a is necessary because the sumcheck code in spartan generates
+    // the point in reverse order compared to how the polynomial commitment
+    // expects it
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
 
@@ -230,11 +235,14 @@ impl<E: Pairing> Polynomial<E> {
     assert!(res_mipp == true);
     timer_mipp_verify.stop();
 
+    // reversing a is necessary because the sumcheck code in spartan generates
+    // the point in reverse order compared to how the polynomial commitment
+    // expects
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
-    let timer_pst_verify = Timer::new("pst_verify");
 
-    // verify that q(a) is indeed v
+    let timer_pst_verify = Timer::new("pst_verify");
+    // PST proof that q(a) is indeed equal to value claimed by the prover
     let res = MultilinearPC::<E>::check(vk, U, &a_rev, v, pst_proof);
     timer_pst_verify.stop();
     res
