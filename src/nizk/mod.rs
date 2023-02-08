@@ -1,9 +1,10 @@
 #![allow(clippy::too_many_arguments)]
+use super::commitments::{MultiCommitGens, PedersenCommit};
+use super::errors::ProofVerifyError;
+use crate::ark_std::UniformRand;
 use crate::math::Math;
 use crate::poseidon_transcript::PoseidonTranscript;
-
-use super::commitments::{Commitments, MultiCommitGens};
-use super::errors::ProofVerifyError;
+use crate::transcript::Transcript;
 use ark_ec::CurveGroup;
 
 use ark_serialize::*;
@@ -40,11 +41,6 @@ impl<G: CurveGroup> DotProductProofLog<G> {
     b"dot product proof (log)"
   }
 
-  pub fn compute_dotproduct(a: &[G], b: &[G]) -> G {
-    assert_eq!(a.len(), b.len());
-    (0..a.len()).map(|i| a[i] * b[i]).sum()
-  }
-
   pub fn prove(
     gens: &DotProductProofGens<G>,
     transcript: &mut PoseidonTranscript<G::ScalarField>,
@@ -75,16 +71,16 @@ impl<G: CurveGroup> DotProductProofLog<G> {
         .collect::<Vec<(G::ScalarField, G::ScalarField)>>();
     };
 
-    let Cx = x_vec.commit(blind_x, &gens.gens_n).compress();
-    transcript.append_point(&Cx);
+    let Cx = PedersenCommit::commit_slice(x_vec, blind_x, &gens.gens_n);
+    transcript.append(b"", &Cx);
 
-    let Cy = y.commit(blind_y, &gens.gens_1).compress();
-    transcript.append_point(&Cy);
-    transcript.append_scalar_vector(a_vec);
+    let Cy = PedersenCommit::commit_scalar(y, blind_y, &gens.gens_1);
+    transcript.append(b"", &Cy);
+    transcript.append(b"", &a_vec);
 
     let blind_Gamma = (*blind_x) + blind_y;
     let (bullet_reduction_proof, _Gamma_hat, x_hat, a_hat, g_hat, rhat_Gamma) =
-      BulletReductionProof::prove(
+      BulletReductionProof::<G>::prove(
         transcript,
         &gens.gens_1.G[0],
         &gens.gens_n.G,
@@ -170,8 +166,7 @@ impl<G: CurveGroup> DotProductProofLog<G> {
     let z2_s = &self.z2;
 
     let lhs = (Gamma_hat.mul(c_s) + beta_s).mul(a_hat_s) + delta_s;
-    let rhs =
-      (g_hat + gens.gens_1.G[0].mul(a_hat_s)).mul(z1_s) + gens.gens_1.h.mul(z2_s);
+    let rhs = (g_hat + gens.gens_1.G[0].mul(a_hat_s)).mul(z1_s) + gens.gens_1.h.mul(z2_s);
 
     assert_eq!(lhs, rhs);
 
@@ -191,7 +186,6 @@ mod tests {
   use super::*;
   use ark_std::UniformRand;
   type F = ark_bls12_377::Fr;
-  
 
   #[test]
   fn check_dotproductproof_log() {
@@ -210,15 +204,8 @@ mod tests {
 
     let params = poseidon_params();
     let mut prover_transcript = PoseidonTranscript::new(&params);
-    let (proof, Cx, Cy) = DotProductProofLog::prove(
-      &gens,
-      &mut prover_transcript,
-      &x,
-      &r_x,
-      &a,
-      &y,
-      &r_y,
-    );
+    let (proof, Cx, Cy) =
+      DotProductProofLog::prove(&gens, &mut prover_transcript, &x, &r_x, &a, &y, &r_y);
 
     let mut verifier_transcript = PoseidonTranscript::new(&params);
     assert!(proof

@@ -3,10 +3,10 @@
 #![allow(non_snake_case)]
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
+use super::super::errors::ProofVerifyError;
 use crate::math::Math;
 use crate::poseidon_transcript::PoseidonTranscript;
-
-use super::super::errors::ProofVerifyError;
+use crate::transcript::Transcript;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_serialize::*;
@@ -81,14 +81,15 @@ impl<G: CurveGroup> BulletReductionProof<G> {
       let c_R = inner_product(a_R, b_L);
 
       let (blind_L, blind_R) = blinds_iter.next().unwrap();
+      let gright_vec = G_R
+        .iter()
+        .chain(iter::once(Q))
+        .chain(iter::once(H))
+        .cloned()
+        .collect::<Vec<G>>();
 
-      let L = G::msm(
-        G_R
-          .iter()
-          .chain(iter::once(Q))
-          .chain(iter::once(H))
-          .map(G::Affine::from)
-          .collect::<Vec<G>>(),
+      let L = G::msm_unchecked(
+        &G::normalize_batch(&gright_vec),
         a_L
           .iter()
           .chain(iter::once(&c_L))
@@ -97,14 +98,14 @@ impl<G: CurveGroup> BulletReductionProof<G> {
           .collect::<Vec<G::ScalarField>>()
           .as_slice(),
       );
-
-      let R = G::msm(
-        G_L
-          .iter()
-          .chain(iter::once(Q))
-          .chain(iter::once(H))
-          .map(G::Affine::from)
-          .collect::<Vec<G>>(),
+      let gl_vec = G_L
+        .iter()
+        .chain(iter::once(Q))
+        .chain(iter::once(H))
+        .cloned()
+        .collect::<Vec<G>>();
+      let R = G::msm_unchecked(
+        &G::normalize_batch(&gl_vec),
         a_R
           .iter()
           .chain(iter::once(&c_R))
@@ -114,10 +115,10 @@ impl<G: CurveGroup> BulletReductionProof<G> {
           .as_slice(),
       );
 
-      transcript.append_point(&L.compress());
-      transcript.append_point(&R.compress());
+      transcript.append(b"", &L);
+      transcript.append(b"", &R);
 
-      let u = transcript.challenge_scalar();
+      let u = transcript.challenge_scalar(b"");
       let u_inv = u.inverse().unwrap();
 
       for i in 0..n {

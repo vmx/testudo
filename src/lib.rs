@@ -47,8 +47,9 @@ use ark_serialize::*;
 use ark_std::Zero;
 use core::cmp::max;
 use errors::{ProofVerifyError, R1CSError};
+use transcript::TranscriptWriter;
 
-use poseidon_transcript::{PoseidonTranscript};
+use poseidon_transcript::PoseidonTranscript;
 use r1csinstance::{
   R1CSCommitment, R1CSCommitmentGens, R1CSDecommitment, R1CSEvalProof, R1CSInstance,
 };
@@ -369,7 +370,7 @@ impl<E: Pairing> SNARK<E> {
     let timer_prove = Timer::new("SNARK::prove");
 
     // transcript.append_protocol_name(SNARK::protocol_name());
-    comm.comm.append_to_poseidon(transcript);
+    comm.comm.write_to_transcript(transcript);
 
     let (r1cs_sat_proof, rx, ry) = {
       let (proof, rx, ry) = {
@@ -414,9 +415,9 @@ impl<E: Pairing> SNARK<E> {
     let timer_eval = Timer::new("eval_sparse_polys");
     let inst_evals = {
       let (Ar, Br, Cr) = inst.inst.evaluate(&rx, &ry);
-      transcript.append_scalar(&Ar);
-      transcript.append_scalar(&Br);
-      transcript.append_scalar(&Cr);
+      transcript.appedn(&Ar);
+      transcript.append(&Br);
+      transcript.append(&Cr);
       (Ar, Br, Cr)
     };
     timer_eval.stop();
@@ -592,7 +593,7 @@ impl<E: Pairing> NIZK<E> {
   ) -> Result<usize, ProofVerifyError> {
     let timer_verify = Timer::new("NIZK::verify");
 
-    transcript.append_bytes(&inst.digest);
+    transcript.append(&inst.digest);
 
     // We send evaluations of A, B, C at r = (rx, ry) as claims
     // to enable the verifier complete the first sum-check
@@ -662,6 +663,14 @@ impl<E: Pairing> NIZK<E> {
 
     Ok((ds, dp, dv))
   }
+}
+
+pub(crate) fn dot_product<F: PrimeField>(a: &[F], b: &[F]) -> F {
+  let mut res = F::zero();
+  for i in 0..a.len() {
+    res += &a[i] * &b[i];
+  }
+  res
 }
 
 #[cfg(test)]

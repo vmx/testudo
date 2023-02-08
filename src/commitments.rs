@@ -3,6 +3,7 @@ use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM};
 
 use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
 use ark_crypto_primitives::sponge::CryptographicSponge;
+use std::ops::Mul;
 
 #[derive(Debug, Clone)]
 pub struct MultiCommitGens<G: CurveGroup> {
@@ -16,14 +17,16 @@ impl<G: CurveGroup> MultiCommitGens<G> {
     let params = poseidon_params();
     let mut sponge = PoseidonSponge::new(&params);
     sponge.absorb(&label);
-    sponge.absorb(&G::generator().0);
+    let mut b = Vec::new();
+    G::generator().serialize_compressed(&mut b).unwrap();
+    sponge.absorb(&b);
 
     let gens = (0..=n)
       .map(|i| {
-        let mut el_aff: Option<G> = None;
+        let mut el_aff: Option<G::Affine> = None;
         while el_aff.is_none() {
           let uniform_bytes = sponge.squeeze_bytes(64);
-          el_aff = G::from_random_bytes(&uniform_bytes);
+          el_aff = G::Affine::from_random_bytes(&uniform_bytes);
         }
         el_aff.unwrap().clear_cofactor()
       })
@@ -62,14 +65,24 @@ impl<G: CurveGroup> MultiCommitGens<G> {
   }
 }
 
-// TODO replace that by arkworks CommitmentScheme probably exists
-pub trait Commitments<G: CurveGroup> {
-  fn commit(&self, blind: &G::ScalarField, gens_n: &MultiCommitGens<G>) -> G;
-}
+pub struct PedersenCommit;
 
-impl<G: CurveGroup> Commitments<G> for G::ScalarField {
-  fn commit(&self, blind: &G::ScalarField, gens_n: &MultiCommitGens<G>) -> G {
+impl PedersenCommit {
+  pub fn commit_scalar<G: CurveGroup>(
+    scalar: &G::ScalarField,
+    blind: &G::ScalarField,
+    gens_n: &MultiCommitGens<G>,
+  ) -> G {
     assert_eq!(gens_n.n, 1);
-    <G as VariableBaseMSM>::msm(&[*self, *blind], &[gens_n.G[0], gens_n.h])
+    <G as VariableBaseMSM>::msm_unchecked(&[gens_n.G[0], gens_n.h], &[*scalar, *blind])
+  }
+
+  pub fn commit_slice<G: CurveGroup>(
+    scalars: &[G::ScalarField],
+    blind: &G::ScalarField,
+    gens_n: &MultiCommitGens<G>,
+  ) -> G {
+    assert_eq!(scalars.len(), gens_n.n);
+    <G as VariableBaseMSM>::msm_unchecked(&gens_n.G, scalars) + gens_n.h.mul(blind)
   }
 }

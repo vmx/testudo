@@ -9,11 +9,9 @@ use super::math::Math;
 use super::nizk::{DotProductProofGens, DotProductProofLog};
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::{pairing::Pairing, CurveGroup};
-use ark_ff::{One, PrimeField, UniformRand, Zero};
-use ark_poly::{MultilinearExtension};
-use ark_poly_commit::multilinear_pc::data_structures::{
-  CommitterKey, VerifierKey,
-};
+use ark_ff::{One, PrimeField, Zero};
+use ark_poly::MultilinearExtension;
+use ark_poly_commit::multilinear_pc::data_structures::{CommitterKey, VerifierKey};
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::*;
 use core::ops::Index;
@@ -188,7 +186,7 @@ impl<E: Pairing> PolyCommitmentGens<E> {
   // num vars is the number of variables in the multilinear polynomial
   // this gives the maximum degree bound
   pub fn new(num_vars: usize, label: &'static [u8]) -> PolyCommitmentGens<E> {
-    let (_left, right) = EqPolynomial::compute_factored_lens(num_vars);
+    let (_left, right) = EqPolynomial::<E::ScalarField>::compute_factored_lens(num_vars);
     let gens = DotProductProofGens::new(right.pow2(), label);
 
     // Generates the SRS and trims it based on the number of variables in the
@@ -258,7 +256,7 @@ impl<F: PrimeField> EqPolynomial<F> {
 
   pub fn compute_factored_evals(&self) -> (Vec<F>, Vec<F>) {
     let ell = self.r.len();
-    let (left_num_vars, _right_num_vars) = EqPolynomial::compute_factored_lens(ell);
+    let (left_num_vars, _right_num_vars) = EqPolynomial::<F>::compute_factored_lens(ell);
 
     let L = EqPolynomial::new(self.r[..left_num_vars].to_vec()).evals();
     let R = EqPolynomial::new(self.r[left_num_vars..ell].to_vec()).evals();
@@ -324,11 +322,7 @@ impl<F: PrimeField> DensePolynomial<F> {
     assert_eq!(L_size * R_size, self.Z.len());
     let C = (0..L_size)
       .into_par_iter()
-      .map(|i| {
-        self.Z[R_size * i..R_size * (i + 1)]
-          .commit(&blinds[i], gens)
-          .compress()
-      })
+      .map(|i| self.Z[R_size * i..R_size * (i + 1)].commit(&blinds[i], gens))
       .collect();
     PolyCommitment { C }
   }
@@ -361,7 +355,8 @@ impl<F: PrimeField> DensePolynomial<F> {
     let n = self.Z.len();
     let ell = self.get_num_vars();
     assert_eq!(n, ell.pow2());
-    let (left_num_vars, right_num_vars) = EqPolynomial::compute_factored_lens(ell);
+    let (left_num_vars, right_num_vars) =
+      EqPolynomial::<E::ScalarField>::compute_factored_lens(ell);
     let L_size = left_num_vars.pow2();
     let R_size = right_num_vars.pow2();
     assert_eq!(L_size * R_size, n);
@@ -376,7 +371,8 @@ impl<F: PrimeField> DensePolynomial<F> {
   }
 
   pub fn bound(&self, L: &[F]) -> Vec<F> {
-    let (left_num_vars, right_num_vars) = EqPolynomial::compute_factored_lens(self.get_num_vars());
+    let (left_num_vars, right_num_vars) =
+      EqPolynomial::<F>::compute_factored_lens(self.get_num_vars());
     let L_size = left_num_vars.pow2();
     let R_size = right_num_vars.pow2();
     (0..R_size)
@@ -408,7 +404,7 @@ impl<F: PrimeField> DensePolynomial<F> {
     assert_eq!(r.len(), self.get_num_vars());
     let chis = EqPolynomial::new(r.to_vec()).evals();
     assert_eq!(chis.len(), self.Z.len());
-    DotProductProofLog::compute_dotproduct(&self.Z, &chis)
+    crate::dot_product(&self.Z, &chis)
   }
 
   fn vec(&self) -> &Vec<F> {
@@ -462,7 +458,7 @@ impl<F: PrimeField> Index<usize> for DensePolynomial<F> {
 impl<G: CurveGroup> TranscriptWriter for PolyCommitment<G> {
   fn write_to_transcript(&self, transcript: &mut impl Transcript) {
     for i in 0..self.C.len() {
-      transcript.append_point(&self.C[i]);
+      transcript.append(b"", &self.C[i]);
     }
   }
 }
@@ -494,7 +490,8 @@ where
     // assert vectors are of the right size
     assert_eq!(poly.get_num_vars(), r.len());
 
-    let (left_num_vars, right_num_vars) = EqPolynomial::compute_factored_lens(r.len());
+    let (left_num_vars, right_num_vars) =
+      EqPolynomial::<E::ScalarField>::compute_factored_lens(r.len());
     let L_size = left_num_vars.pow2();
     let R_size = right_num_vars.pow2();
 
@@ -603,7 +600,7 @@ mod tests {
       .collect::<Vec<F>>();
 
     // compute dot product between LZ and R
-    DotProductProofLog::compute_dotproduct(&LZ, &R)
+    crate::dot_product(&LZ, &R)
   }
 
   #[test]
@@ -746,11 +743,11 @@ mod tests {
     assert_eq!(eval, F::from(28));
 
     let gens = PolyCommitmentGens::new(poly.get_num_vars(), b"test-two");
-    let (poly_commitment, blinds) = poly.commit(&gens, None);
+    let (poly_commitment, blinds) = poly.commit(&gens);
 
     let params = poseidon_params();
     let mut prover_transcript = PoseidonTranscript::new(&params);
-    let (proof, C_Zr) = PolyEvalProof::prove(
+    let (proof, C_Zr) = PolyEvalProof::<E>::prove(
       &poly,
       Some(&blinds),
       &r,
