@@ -3,12 +3,12 @@
 use super::dense_mlpoly::DensePolynomial;
 use super::errors::ProofVerifyError;
 use crate::poseidon_transcript::PoseidonTranscript;
+use crate::transcript::Transcript;
 use crate::transcript::TranscriptWriter;
 
 use super::unipoly::UniPoly;
-
 use ark_ff::PrimeField;
-use ark_ff::Zero;
+
 use ark_serialize::*;
 
 use itertools::izip;
@@ -48,7 +48,7 @@ impl<F: PrimeField> SumcheckInstanceProof<F> {
       poly.write_to_transcript(transcript);
 
       //derive the verifier's challenge for the next round
-      let r_i = transcript.challenge_scalar();
+      let r_i = transcript.challenge_scalar(b"");
 
       r.push(r_i);
 
@@ -120,7 +120,7 @@ impl<F: PrimeField> SumcheckInstanceProof<F> {
       // append the prover's message to the transcript
       poly.write_to_transcript(transcript);
       //derive the verifier's challenge for the next round
-      let r_j = transcript.challenge_scalar();
+      let r_j = transcript.challenge_scalar(b"");
       r.push(r_j);
 
       // bound all tables to the verifier's challenege
@@ -192,7 +192,7 @@ impl<F: PrimeField> SumcheckInstanceProof<F> {
       poly.write_to_transcript(transcript);
 
       //derive the verifier's challenge for the next round
-      let r_j = transcript.challenge_scalar();
+      let r_j = transcript.challenge_scalar(b"");
       r.push(r_j);
       // bound all tables to the verifier's challenege
       poly_A.bound_poly_var_top(&r_j);
@@ -325,7 +325,7 @@ impl<F: PrimeField> SumcheckInstanceProof<F> {
       poly.write_to_transcript(transcript);
 
       //derive the verifier's challenge for the next round
-      let r_j = transcript.challenge_scalar();
+      let r_j = transcript.challenge_scalar(b"");
       r.push(r_j);
 
       // bound all tables to the verifier's challenege
@@ -413,7 +413,7 @@ impl<F: PrimeField> SumcheckInstanceProof<F> {
       poly.write_to_transcript(transcript);
 
       //derive the verifier's challenge for the next round
-      let r_j = transcript.challenge_scalar();
+      let r_j = transcript.challenge_scalar(b"");
       r.push(r_j);
 
       // bound all tables to the verifier's challenege

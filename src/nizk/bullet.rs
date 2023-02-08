@@ -4,10 +4,10 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 use super::super::errors::ProofVerifyError;
-use ark_ec::AffineRepr;
 use crate::math::Math;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::Transcript;
+use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_serialize::*;
@@ -75,8 +75,8 @@ impl<G: CurveGroup> BulletReductionProof<G> {
 
     while n != 1 {
       n /= 2;
-      let (mut a_L, mut a_R) = a.split_at_mut(n);
-      let (mut b_L, mut b_R) = b.split_at_mut(n);
+      let (a_L, a_R) = a.split_at_mut(n);
+      let (b_L, b_R) = b.split_at_mut(n);
       let (G_L, G_R) = G.split_at_mut(n);
 
       let c_L = inner_product(a_L, b_R);
@@ -231,8 +231,8 @@ impl<G: CurveGroup> BulletReductionProof<G> {
   ) -> Result<(G, G, G::ScalarField), ProofVerifyError> {
     let (u_sq, u_inv_sq, s) = self.verification_scalars(n, transcript)?;
 
-    let Ls = self.L_vec;
-    let Rs = self.R_vec;
+    let Ls = &self.L_vec;
+    let Rs = &self.R_vec;
 
     let G_hat = G::msm(Gs, s.as_slice()).map_err(|_| ProofVerifyError::InternalError)?;
     let a_hat = inner_product(a, &s);

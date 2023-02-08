@@ -1,4 +1,3 @@
-use crate::constraints::PoseidonTranscripVar;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::Transcript;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
@@ -10,7 +9,7 @@ use ark_poly_commit::multilinear_pc::data_structures::{
   CommitmentG2, CommitterKey, ProofG1, VerifierKey,
 };
 use ark_poly_commit::multilinear_pc::MultilinearPC;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError, Write};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::One;
 use ark_std::Zero;
 use rayon::iter::ParallelIterator;

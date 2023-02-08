@@ -10,6 +10,9 @@ use libspartan::parameters::poseidon_params;
 use libspartan::poseidon_transcript::PoseidonTranscript;
 use libspartan::{Instance, NIZKGens, NIZK};
 
+type F = ark_bls12_377::Fr;
+type E = ark_bls12_377::Bls12_377;
+
 fn print(msg: &str) {
   let star = "* ";
   println!("{:indent$}{}{}", "", star, msg, indent = 2);
@@ -26,10 +29,11 @@ pub fn main() {
     let num_inputs = 10;
 
     // produce a synthetic R1CSInstance
-    let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
+    let (inst, vars, inputs) =
+      Instance::<F>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
 
     // produce public generators
-    let gens = NIZKGens::new(num_cons, num_vars, num_inputs);
+    let gens = NIZKGens::<E>::new(num_cons, num_vars, num_inputs);
 
     let params = poseidon_params();
     // produce a proof of satisfiability
@@ -46,7 +50,7 @@ pub fn main() {
     // verify the proof of satisfiability
     let mut verifier_transcript = PoseidonTranscript::new(&params);
     assert!(proof
-      .verify(&inst, &inputs, &mut verifier_transcript, &gens)
+      .verify(&inst, &inputs, &mut verifier_transcript, &gens, params)
       .is_ok());
 
     println!();

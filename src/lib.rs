@@ -41,6 +41,7 @@ pub mod parameters;
 mod constraints;
 pub mod poseidon_transcript;
 
+use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use ark_serialize::*;
 use core::cmp::max;
 use errors::{ProofVerifyError, R1CSError};
@@ -334,9 +335,6 @@ pub struct SNARK<E: Pairing> {
 }
 
 impl<E: Pairing> SNARK<E> {
-  fn protocol_name() -> &'static [u8] {
-    b"Spartan SNARK proof"
-  }
 
   /// A public computation to create a commitment to an R1CS instance
   pub fn encode(
@@ -455,6 +453,7 @@ impl<E: Pairing> SNARK<E> {
     input: &InputsAssignment<E::ScalarField>,
     transcript: &mut PoseidonTranscript<E::ScalarField>,
     gens: &SNARKGens<E>,
+    poseidon: PoseidonConfig<E::ScalarField>,
   ) -> Result<(u128, u128, u128), ProofVerifyError> {
     let timer_verify = Timer::new("SNARK::verify");
     // transcript.append_protocol_name(SNARK::protocol_name());
@@ -472,6 +471,7 @@ impl<E: Pairing> SNARK<E> {
       &self.inst_evals,
       transcript,
       &gens.gens_r1cs_sat,
+      poseidon,
     )?;
     timer_sat_proof.stop();
 
@@ -531,9 +531,6 @@ pub struct NIZK<E: Pairing> {
 }
 
 impl<E: Pairing> NIZK<E> {
-  fn protocol_name() -> &'static [u8] {
-    b"Spartan NIZK proof"
-  }
 
   /// A method to produce a NIZK proof of the satisfiability of an R1CS instance
   pub fn prove(
@@ -588,6 +585,7 @@ impl<E: Pairing> NIZK<E> {
     input: &InputsAssignment<E::ScalarField>,
     transcript: &mut PoseidonTranscript<E::ScalarField>,
     gens: &NIZKGens<E>,
+    poseidon: PoseidonConfig<E::ScalarField>,
   ) -> Result<usize, ProofVerifyError> {
     let timer_verify = Timer::new("NIZK::verify");
 
@@ -610,6 +608,7 @@ impl<E: Pairing> NIZK<E> {
       &inst_evals,
       transcript,
       &gens.gens_r1cs_sat,
+      poseidon,
     )?;
 
     // verify if claimed rx and ry are correct
@@ -628,6 +627,7 @@ impl<E: Pairing> NIZK<E> {
     input: &InputsAssignment<E::ScalarField>,
     transcript: &mut PoseidonTranscript<E::ScalarField>,
     gens: &NIZKGens<E>,
+    poseidon: PoseidonConfig<E::ScalarField>,
   ) -> Result<(u128, u128, u128), ProofVerifyError> {
     let timer_verify = Timer::new("NIZK::verify");
 
@@ -651,6 +651,7 @@ impl<E: Pairing> NIZK<E> {
       &inst_evals,
       transcript,
       &gens.gens_r1cs_sat,
+      poseidon,
     )?;
 
     // verify if claimed rx and ry are correct
@@ -714,7 +715,13 @@ mod tests {
     // verify the proof
     let mut verifier_transcript = PoseidonTranscript::new(&params);
     assert!(proof
-      .verify(&comm, &inputs, &mut verifier_transcript, &gens)
+      .verify(
+        &comm,
+        &inputs,
+        &mut verifier_transcript,
+        &gens,
+        poseidon_params()
+      )
       .is_ok());
   }
 
@@ -824,7 +831,13 @@ mod tests {
     // verify the SNARK
     let mut verifier_transcript = PoseidonTranscript::new(&params);
     assert!(proof
-      .verify(&comm, &assignment_inputs, &mut verifier_transcript, &gens)
+      .verify(
+        &comm,
+        &assignment_inputs,
+        &mut verifier_transcript,
+        &gens,
+        poseidon_params()
+      )
       .is_ok());
 
     // NIZK public params
@@ -845,7 +858,13 @@ mod tests {
     // verify the NIZK
     let mut verifier_transcript = PoseidonTranscript::new(&params);
     assert!(proof
-      .verify_groth16(&inst, &assignment_inputs, &mut verifier_transcript, &gens)
+      .verify_groth16(
+        &inst,
+        &assignment_inputs,
+        &mut verifier_transcript,
+        &gens,
+        poseidon_params()
+      )
       .is_ok());
   }
 }

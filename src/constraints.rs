@@ -7,7 +7,7 @@ use crate::{
   unipoly::UniPoly,
 };
 
-use ark_ff::{PrimeField, Zero};
+use ark_ff::PrimeField;
 
 use ark_crypto_primitives::sponge::{
   constraints::CryptographicSpongeVar,

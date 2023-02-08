@@ -37,9 +37,6 @@ pub struct DotProductProofLog<G: CurveGroup> {
 }
 
 impl<G: CurveGroup> DotProductProofLog<G> {
-  fn protocol_name() -> &'static [u8] {
-    b"dot product proof (log)"
-  }
 
   pub fn prove(
     gens: &DotProductProofGens<G>,

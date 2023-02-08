@@ -8,6 +8,8 @@ use ark_serialize::*;
 use libspartan::parameters::poseidon_params;
 use libspartan::poseidon_transcript::PoseidonTranscript;
 use libspartan::{Instance, SNARKGens, SNARK};
+type F = ark_bls12_377::Fr;
+type E = ark_bls12_377::Bls12_377;
 
 fn print(msg: &str) {
   let star = "* ";
@@ -25,10 +27,11 @@ pub fn main() {
     let num_inputs = 10;
 
     // produce a synthetic R1CSInstance
-    let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
+    let (inst, vars, inputs) =
+      Instance::<F>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
 
     // produce public generators
-    let gens = SNARKGens::new(num_cons, num_vars, num_inputs, num_cons);
+    let gens = SNARKGens::<E>::new(num_cons, num_vars, num_inputs, num_cons);
 
     // create a commitment to R1CSInstance
     let (comm, decomm) = SNARK::encode(&inst, &gens);
@@ -57,7 +60,7 @@ pub fn main() {
     // verify the proof of satisfiability
     let mut verifier_transcript = PoseidonTranscript::new(&params);
     assert!(proof
-      .verify(&comm, &inputs, &mut verifier_transcript, &gens)
+      .verify(&comm, &inputs, &mut verifier_transcript, &gens, params)
       .is_ok());
 
     println!();

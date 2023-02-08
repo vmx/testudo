@@ -5,8 +5,6 @@ use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
 };
-use std::ops::Mul;
-
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -92,7 +90,7 @@ impl<E: Pairing> Polynomial<E> {
     let q = self.q.clone().unwrap();
     (0..q.Z.len())
       .into_par_iter()
-      .map(|j| q.Z[j].mul(Polynomial::get_chi_i(&a, j)))
+      .map(|j| q.Z[j] * Polynomial::<E>::get_chi_i(&a, j))
       .sum()
   }
 
@@ -273,7 +271,7 @@ mod tests {
     let p = DensePolynomial::new(Z.clone());
     let res1 = p.evaluate(&r);
 
-    let mut pl = Polynomial::from_evaluations(&Z.clone());
+    let mut pl = Polynomial::<E>::from_evaluations(&Z.clone());
     let res2 = pl.eval(&r);
 
     assert!(res1 == res2);

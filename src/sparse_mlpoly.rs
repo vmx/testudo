@@ -82,9 +82,6 @@ pub struct DerefsEvalProof<E: Pairing> {
 }
 
 impl<E: Pairing> DerefsEvalProof<E> {
-  fn protocol_name() -> &'static [u8] {
-    b"Derefs evaluation proof"
-  }
 
   fn prove_single(
     joint_poly: &DensePolynomial<E::ScalarField>,
@@ -686,9 +683,6 @@ struct HashLayerProof<E: Pairing> {
 }
 
 impl<E: Pairing> HashLayerProof<E> {
-  fn protocol_name() -> &'static [u8] {
-    b"Sparse polynomial hash layer proof"
-  }
 
   fn prove_helper(
     rand: (&Vec<E::ScalarField>, &Vec<E::ScalarField>),
@@ -747,9 +741,9 @@ impl<E: Pairing> HashLayerProof<E> {
     // evaluate row_addr, row_read-ts, col_addr, col_read-ts, val at rand_ops
     // evaluate row_audit_ts and col_audit_ts at rand_mem
     let (eval_row_addr_vec, eval_row_read_ts_vec, eval_row_audit_ts) =
-      HashLayerProof::prove_helper((rand_mem, rand_ops), &dense.row);
+      HashLayerProof::<E>::prove_helper((rand_mem, rand_ops), &dense.row);
     let (eval_col_addr_vec, eval_col_read_ts_vec, eval_col_audit_ts) =
-      HashLayerProof::prove_helper((rand_mem, rand_ops), &dense.col);
+      HashLayerProof::<E>::prove_helper((rand_mem, rand_ops), &dense.col);
     let eval_val_vec = (0..dense.val.len())
       .map(|i| dense.val[i].evaluate(rand_ops))
       .collect::<Vec<E::ScalarField>>();
@@ -788,7 +782,7 @@ impl<E: Pairing> HashLayerProof<E> {
     // form a single decommitment using comb_comb_mem at rand_mem
     let evals_mem: Vec<E::ScalarField> = vec![eval_row_audit_ts, eval_col_audit_ts];
     // evals_mem.append_to_transcript(b"claim_evals_mem", transcript);
-    transcript.append(&evals_mem);
+    transcript.append(b"", &evals_mem);
     let challenges_mem = transcript.challenge_scalar_vec(b"", evals_mem.len().log_2());
 
     let mut poly_evals_mem = DensePolynomial::new(evals_mem);
@@ -985,7 +979,7 @@ impl<E: Pairing> HashLayerProof<E> {
     let mut r_joint_mem = challenges_mem;
     r_joint_mem.extend(rand_mem);
     // joint_claim_eval_mem.append_to_transcript(b"joint_claim_eval_mem", transcript);
-    transcript.append(b"",&joint_claim_eval_mem);
+    transcript.append(b"", &joint_claim_eval_mem);
     self.proof_mem.verify_plain(
       &gens.gens_mem,
       transcript,
@@ -996,7 +990,7 @@ impl<E: Pairing> HashLayerProof<E> {
 
     // verify the claims from the product layer
     let (eval_ops_addr, eval_read_ts, eval_audit_ts) = &self.eval_row;
-    HashLayerProof::verify_helper(
+    HashLayerProof::<E>::verify_helper(
       &(rand_mem, rand_ops),
       claims_row,
       eval_row_ops_val,
@@ -1009,7 +1003,7 @@ impl<E: Pairing> HashLayerProof<E> {
     )?;
 
     let (eval_ops_addr, eval_read_ts, eval_audit_ts) = &self.eval_col;
-    HashLayerProof::verify_helper(
+    HashLayerProof::<E>::verify_helper(
       &(rand_mem, rand_ops),
       claims_col,
       eval_col_ops_val,
@@ -1036,9 +1030,6 @@ struct ProductLayerProof<F: PrimeField> {
 }
 
 impl<F: PrimeField> ProductLayerProof<F> {
-  fn protocol_name() -> &'static [u8] {
-    b"Sparse polynomial product layer proof"
-  }
 
   pub fn prove(
     row_prod_layer: &mut ProductLayer<F>,
@@ -1066,9 +1057,9 @@ impl<F: PrimeField> ProductLayerProof<F> {
     let rs: F = (0..row_eval_read.len()).map(|i| row_eval_read[i]).product();
     assert_eq!(row_eval_init * ws, rs * row_eval_audit);
 
-    transcript.append(b"",&row_eval_init);
+    transcript.append(b"", &row_eval_init);
     transcript.append(b"", &row_eval_read);
-    transcript.append(b""; &row_eval_write);
+    transcript.append(b"", &row_eval_write);
     transcript.append(b"", &row_eval_audit);
 
     let col_eval_init = col_prod_layer.init.evaluate();
@@ -1087,10 +1078,10 @@ impl<F: PrimeField> ProductLayerProof<F> {
     let rs: F = (0..col_eval_read.len()).map(|i| col_eval_read[i]).product();
     assert_eq!(col_eval_init * ws, rs * col_eval_audit);
 
-    transcript.append(&col_eval_init);
-    transcript.append(&col_eval_read);
-    transcript.append(&col_eval_write);
-    transcript.append(&col_eval_audit);
+    transcript.append(b"", &col_eval_init);
+    transcript.append(b"", &col_eval_read);
+    transcript.append(b"", &col_eval_write);
+    transcript.append(b"", &col_eval_audit);
 
     // prepare dotproduct circuit for batching then with ops-related product circuits
     assert_eq!(eval.len(), derefs.row_ops_val.len());
@@ -1115,8 +1106,8 @@ impl<F: PrimeField> ProductLayerProof<F> {
 
       // eval_dotp_left.append_to_transcript(b"claim_eval_dotp_left", transcript);
       // eval_dotp_right.append_to_transcript(b"claim_eval_dotp_right", transcript);
-      transcript.append(&eval_dotp_left);
-      transcript.append(&eval_dotp_right);
+      transcript.append(b"", &eval_dotp_left);
+      transcript.append(b"", &eval_dotp_right);
       assert_eq!(eval_dotp_left + eval_dotp_right, eval[i]);
       eval_dotp_left_vec.push(eval_dotp_left);
       eval_dotp_right_vec.push(eval_dotp_right);
@@ -1252,10 +1243,10 @@ impl<F: PrimeField> ProductLayerProof<F> {
     // row_eval_write.append_to_transcript(b"claim_row_eval_write", transcript);
     // row_eval_audit.append_to_transcript(b"claim_row_eval_audit", transcript);
 
-    transcript.append(row_eval_init);
-    transcript.append(row_eval_read);
-    transcript.append(row_eval_write);
-    transcript.append(row_eval_audit);
+    transcript.append(b"", row_eval_init);
+    transcript.append(b"", row_eval_read);
+    transcript.append(b"", row_eval_write);
+    transcript.append(b"", row_eval_audit);
 
     // subset check
     let (col_eval_init, col_eval_read, col_eval_write, col_eval_audit) = &self.eval_col;
@@ -1331,9 +1322,6 @@ struct PolyEvalNetworkProof<E: Pairing> {
 }
 
 impl<E: Pairing> PolyEvalNetworkProof<E> {
-  fn protocol_name() -> &'static [u8] {
-    b"Sparse polynomial evaluation proof"
-  }
 
   pub fn prove(
     network: &mut PolyEvalNetwork<E::ScalarField>,
@@ -1435,9 +1423,6 @@ pub struct SparseMatPolyEvalProof<E: Pairing> {
 }
 
 impl<E: Pairing> SparseMatPolyEvalProof<E> {
-  fn protocol_name() -> &'static [u8] {
-    b"Sparse polynomial evaluation proof"
-  }
 
   fn equalize(
     rx: &[E::ScalarField],
@@ -1475,7 +1460,7 @@ impl<E: Pairing> SparseMatPolyEvalProof<E> {
 
     let (mem_rx, mem_ry) = {
       // equalize the lengths of rx and ry
-      let (rx_ext, ry_ext) = SparseMatPolyEvalProof::equalize(rx, ry);
+      let (rx_ext, ry_ext) = SparseMatPolyEvalProof::<E>::equalize(rx, ry);
       let poly_rx = EqPolynomial::new(rx_ext).evals();
       let poly_ry = EqPolynomial::new(ry_ext).evals();
       (poly_rx, poly_ry)
@@ -1533,7 +1518,7 @@ impl<E: Pairing> SparseMatPolyEvalProof<E> {
     // transcript.append_protocol_name(SparseMatPolyEvalProof::protocol_name());
 
     // equalize the lengths of rx and ry
-    let (rx_ext, ry_ext) = SparseMatPolyEvalProof::equalize(rx, ry);
+    let (rx_ext, ry_ext) = SparseMatPolyEvalProof::<E>::equalize(rx, ry);
 
     let (nz, num_mem_cells) = (comm.num_ops, comm.num_mem_cells);
     assert_eq!(rx_ext.len().pow2(), num_mem_cells);
@@ -1640,7 +1625,7 @@ mod tests {
     }
 
     let poly_M = SparseMatPolynomial::new(num_vars_x, num_vars_y, M);
-    let gens = SparseMatPolyCommitmentGens::new(
+    let gens = SparseMatPolyCommitmentGens::<E>::new(
       b"gens_sparse_poly",
       num_vars_x,
       num_vars_y,

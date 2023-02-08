@@ -12,7 +12,6 @@ use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use ark_serialize::*;
-use ark_std::{One, UniformRand, Zero};
 use digest::{ExtendableOutput, Input};
 use sha3::Shake256;
 

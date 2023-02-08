@@ -2,20 +2,20 @@
 
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::{Transcript, TranscriptWriter};
-
 use super::commitments::{MultiCommitGens, PedersenCommit};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::nizk::{DotProductProofGens, DotProductProofLog};
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::{pairing::Pairing, CurveGroup};
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{PrimeField, Zero};
 use ark_poly::MultilinearExtension;
 use ark_poly_commit::multilinear_pc::data_structures::{CommitterKey, VerifierKey};
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::*;
 use core::ops::Index;
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
+use ark_std::One;
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
@@ -474,10 +474,6 @@ impl<E> PolyEvalProof<E>
 where
   E: Pairing,
 {
-  fn protocol_name() -> &'static [u8] {
-    b"polynomial evaluation proof"
-  }
-
   pub fn prove(
     poly: &DensePolynomial<E::ScalarField>,
     blinds_opt: Option<&PolyCommitmentBlinds<E::ScalarField>>,
@@ -547,9 +543,9 @@ where
     let (L, R) = eq.compute_factored_evals();
 
     // compute a weighted sum of commitments and L
-    let C_decompressed = comm.C;
+    let C_decompressed = &comm.C;
 
-    let C_LZ = <E::G1 as VariableBaseMSM>::msm(&C_decompressed, &L).compress();
+    let C_LZ = <E::G1 as VariableBaseMSM>::msm(&<E::G1 as CurveGroup>::normalize_batch(C_decompressed), &L).unwrap();
 
     self
       .proof

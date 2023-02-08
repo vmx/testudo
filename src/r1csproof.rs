@@ -4,12 +4,10 @@ use super::errors::ProofVerifyError;
 use crate::constraints::{R1CSVerificationCircuit, VerifierConfig};
 use crate::math::Math;
 use crate::mipp::MippProof;
-use crate::parameters::poseidon_params;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
-use crate::transcript::{Transcript, TranscriptWriter};
-use ark_bls12_377::Bls12_377 as I;
+use crate::transcript::{Transcript};
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use ark_ec::pairing::Pairing;
 
@@ -118,9 +116,6 @@ impl<E: Pairing> R1CSProof<E> {
     (sc_proof_phase_two, r, claims)
   }
 
-  fn protocol_name() -> &'static [u8] {
-    b"R1CS proof"
-  }
 
   pub fn prove(
     inst: &R1CSInstance<E::ScalarField>,
@@ -332,6 +327,7 @@ impl<E: Pairing> R1CSProof<E> {
     let timer_verification = Timer::new("verification");
     let start = Instant::now();
 
+    /// TODO : they are not necessary ?
     let (v_A, v_B, v_C, v_AB) = self.claims_phase2;
 
     let mut pubs = vec![];

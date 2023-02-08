@@ -22,7 +22,7 @@ impl<F: Field> UniPoly<F> {
     assert!(evals.len() == 3 || evals.len() == 4);
     let coeffs = if evals.len() == 3 {
       // ax^2 + bx + c
-      let two_inv = F::from(2).inverse().unwrap();
+      let two_inv = F::from(2 as u8).inverse().unwrap();
 
       let c = evals[0];
       let a = two_inv * (evals[2] - evals[1] - evals[1] + c);
@@ -30,8 +30,8 @@ impl<F: Field> UniPoly<F> {
       vec![c, b, a]
     } else {
       // ax^3 + bx^2 + cx + d
-      let two_inv = F::from(2).inverse().unwrap();
-      let six_inv = F::from(6).inverse().unwrap();
+      let two_inv = F::from(2 as u8).inverse().unwrap();
+      let six_inv = F::from(6 as u8).inverse().unwrap();
 
       let d = evals[0];
       let a = six_inv
@@ -71,8 +71,7 @@ impl<F: Field> UniPoly<F> {
     }
     eval
   }
-
-  pub fn compress(&self) -> CompressedUniPoly<F>{
+  pub fn compress(&self) -> CompressedUniPoly<F> {
     let coeffs_except_linear_term = [&self.coeffs[..1], &self.coeffs[2..]].concat();
     assert_eq!(coeffs_except_linear_term.len() + 1, self.coeffs.len());
     CompressedUniPoly {
@@ -80,6 +79,7 @@ impl<F: Field> UniPoly<F> {
     }
   }
 }
+
 
 impl<F: PrimeField> CompressedUniPoly<F> {
   // we require eval(0) + eval(1) = hint, so we can solve for the linear term as:
@@ -102,7 +102,7 @@ impl<F: PrimeField> TranscriptWriter for UniPoly<F> {
   fn write_to_transcript(&self, transcript: &mut impl Transcript) {
     // transcript.append_message(label, b"UniPoly_begin");
     for i in 0..self.coeffs.len() {
-      transcript.append(&self.coeffs[i], "coeffs");
+      transcript.append(b"", &self.coeffs[i]);
     }
     // transcript.append_message(label, b"UniPoly_end");
   }
@@ -118,11 +118,11 @@ mod tests {
   type F = ark_bls12_377::Fr;
 
   #[test]
-  fn test_from_evals_quad<F: PrimeField>() {
+  fn test_from_evals_quad() {
     // polynomial is 2x^2 + 3x + 1
     let e0 = F::one();
-    let e1 = F::from(6);
-    let e2 = F::from(15);
+    let e1 = F::from(6 as u8);
+    let e2 = F::from(15 as u8);
     let evals = vec![e0, e1, e2];
     let poly = UniPoly::from_evals(&evals);
 
@@ -130,8 +130,8 @@ mod tests {
     assert_eq!(poly.eval_at_one(), e1);
     assert_eq!(poly.coeffs.len(), 3);
     assert_eq!(poly.coeffs[0], F::one());
-    assert_eq!(poly.coeffs[1], F::from(3));
-    assert_eq!(poly.coeffs[2], F::from(2));
+    assert_eq!(poly.coeffs[1], F::from(3 as u8));
+    assert_eq!(poly.coeffs[2], F::from(2 as u8));
 
     let hint = e0 + e1;
     let compressed_poly = poly.compress();
@@ -140,8 +140,8 @@ mod tests {
       assert_eq!(decompressed_poly.coeffs[i], poly.coeffs[i]);
     }
 
-    let e3 = F::from(28);
-    assert_eq!(poly.evaluate(&F::from(3)), e3);
+    let e3 = F::from(28 as u8);
+    assert_eq!(poly.evaluate(&F::from(3 as u8)), e3);
   }
 
   #[test]

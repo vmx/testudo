@@ -22,7 +22,7 @@ impl<G: CurveGroup> MultiCommitGens<G> {
     sponge.absorb(&b);
 
     let gens = (0..=n)
-      .map(|i| {
+      .map(|_| {
         let mut el_aff: Option<G::Affine> = None;
         while el_aff.is_none() {
           let uniform_bytes = sponge.squeeze_bytes(64);
