@@ -185,7 +185,7 @@ impl Polynomial {
     let comms: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
 
     let c_u =
-      <G1 as VariableBaseMSM>::msm_unchecked(a_vec.as_slice(), chis.as_slice()).into_affine();
+      <G1 as VariableBaseMSM>::msm_unchecked(comms.as_slice(), chis.as_slice()).into_affine();
     timer_msm.stop();
 
     let U: Commitment<I> = Commitment {
@@ -215,7 +215,7 @@ impl Polynomial {
 
     // reversing a is necessary because the sumcheck code in spartan generates
     // the point in reverse order compared to how the polynomial commitment
-    // expects
+    // expects it
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
 
