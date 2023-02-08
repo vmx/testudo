@@ -6,9 +6,7 @@ use ark_poly_commit::multilinear_pc::{
   MultilinearPC,
 };
 
-use rayon::prelude::{
-  IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
-};
+use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
   dense_mlpoly::DensePolynomial, math::Math, poseidon_transcript::PoseidonTranscript, timer::Timer,

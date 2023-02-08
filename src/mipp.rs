@@ -2,7 +2,7 @@ use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::CurveGroup;
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::{Field, PrimeField};
-use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
+use ark_poly::DenseMultilinearExtension;
 use ark_poly_commit::multilinear_pc::data_structures::{
   CommitmentG2, CommitterKey, ProofG1, VerifierKey,
 };
@@ -74,20 +74,24 @@ impl<E: Pairing> MippProof<E> {
       let (ry_l, ry_r) = (&y_l, &y_r);
       // See section 3.3 for paper version with equivalent names
       try_par! {
-          // MIPP part
-          // Compute cross commitments
-          // u_l = a[n':] ^ y[:n']
-          // TODO to replace by bitsf_multiexp
-          let comm_u_l = multiexponentiation(ra_l, &ry_r),
-          // u_r = a[:n'] ^ y[n':]
-          let comm_u_r = multiexponentiation(ra_r, &ry_l)
+      // MIPP part
+      // Compute cross commitments
+      // u_l = a[n':] ^ y[:n']
+      // TODO to replace by bitsf_multiexp
+      let comm_u_l = multiexponentiation(ra_l, &ry_r),
+      // u_r = a[:n'] ^ y[n':]
+      let comm_u_r = multiexponentiation(ra_r, &ry_l)
+         // Compute the cross pairing products over the distinct halfs of A
+
+        };
+
+      par! {
+        // t_l = a[n':] * h[:n']
+        let comm_t_l = pairings_product::<E>(&a_l, h_r),
+        // t_r = a[:n'] * h[n':]
+        let comm_t_r = pairings_product::<E>(&a_r, h_l)
 
       };
-      // Compute the cross pairing products over the distinct halfs of A
-      // t_l = a[n':] * h[:n']
-      let comm_t_l = pairings_product::<E>(&a_l, h_r);
-      // t_r = a[:n'] * h[n':]
-      let comm_t_r = pairings_product::<E>(&a_r, h_l);
 
       // Fiat-Shamir challenge
       transcript.append(b"comm_u_l", &comm_u_l);
