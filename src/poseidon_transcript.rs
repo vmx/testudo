@@ -1,14 +1,9 @@
-use super::scalar::Scalar;
-use crate::group::{CompressedGroup, Fr};
 use crate::transcript::Transcript;
-use ark_bls12_377::{Bls12_377 as I, G1Affine};
 use ark_crypto_primitives::sponge::{
   poseidon::{PoseidonConfig, PoseidonSponge},
   CryptographicSponge,
 };
-use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use ark_poly_commit::multilinear_pc::data_structures::Commitment;
 use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
 #[derive(Clone)]

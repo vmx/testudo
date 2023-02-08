@@ -1,6 +1,3 @@
-use super::group::{GroupElement, GroupElementAffine, VartimeMultiscalarMul, GROUP_BASEPOINT};
-use super::scalar::Scalar;
-use crate::group::CompressGroupElement;
 use crate::parameters::*;
 use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM};
 use ark_ff::PrimeField;
@@ -21,14 +18,14 @@ impl<G: CurveGroup> MultiCommitGens<G> {
     let params = poseidon_params();
     let mut sponge = PoseidonSponge::new(&params);
     sponge.absorb(&label);
-    sponge.absorb(&GROUP_BASEPOINT.compress().0);
+    sponge.absorb(&G::generator().0);
 
     let gens = (0..=n)
       .map(|i| {
-        let mut el_aff: Option<GroupElementAffine> = None;
+        let mut el_aff: Option<G> = None;
         while el_aff.is_none() {
           let uniform_bytes = sponge.squeeze_bytes(64);
-          el_aff = GroupElementAffine::from_random_bytes(&uniform_bytes);
+          el_aff = G::from_random_bytes(&uniform_bytes);
         }
         el_aff.unwrap().clear_cofactor()
       })

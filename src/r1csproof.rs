@@ -2,7 +2,6 @@
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyCommitmentGens};
 use super::errors::ProofVerifyError;
 use crate::constraints::{R1CSVerificationCircuit, VerifierConfig};
-use crate::group::{Fq, Fr};
 use crate::math::Math;
 use crate::mipp::MippProof;
 use crate::parameters::poseidon_params;
@@ -10,14 +9,12 @@ use crate::poseidon_transcript::PoseidonTranscript;
 use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
 use ark_bls12_377::Bls12_377 as I;
-use ark_bw6_761::BW6_761 as P;
 use ark_ec::pairing::Pairing;
 
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
 
 use super::r1csinstance::R1CSInstance;
 
-use super::scalar::Scalar;
 use super::sparse_mlpoly::{SparsePolyEntry, SparsePolynomial};
 use super::timer::Timer;
 use ark_snark::{CircuitSpecificSetupSNARK, SNARK};
@@ -30,28 +27,33 @@ use ark_std::{One, Zero};
 use std::time::Instant;
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
-pub struct R1CSProof {
+pub struct R1CSProof<E: Pairing> {
   // The PST commitment to the multilinear extension of the witness.
-  comm: Commitment<I>,
-  sc_proof_phase1: SumcheckInstanceProof,
-  claims_phase2: (Scalar, Scalar, Scalar, Scalar),
-  sc_proof_phase2: SumcheckInstanceProof,
-  eval_vars_at_ry: Scalar,
-  proof_eval_vars_at_ry: Proof<I>,
-  rx: Vec<Scalar>,
-  ry: Vec<Scalar>,
+  comm: Commitment<E>,
+  sc_proof_phase1: SumcheckInstanceProof<E::ScalarField>,
+  claims_phase2: (
+    E::ScalarField,
+    E::ScalarField,
+    E::ScalarField,
+    E::ScalarField,
+  ),
+  sc_proof_phase2: SumcheckInstanceProof<E::ScalarField>,
+  eval_vars_at_ry: E::ScalarField,
+  proof_eval_vars_at_ry: Proof<E>,
+  rx: Vec<E::ScalarField>,
+  ry: Vec<E::ScalarField>,
   // The transcript state after the satisfiability proof was computed.
-  pub transcript_sat_state: Scalar,
-  pub t: <I as Pairing>::TargetField,
-  pub mipp_proof: MippProof<I>,
+  pub transcript_sat_state: E::ScalarField,
+  pub t: E::TargetField,
+  pub mipp_proof: MippProof<E>,
 }
 
 #[derive(Clone)]
-pub struct R1CSGens {
-  gens_pc: PolyCommitmentGens,
+pub struct R1CSGens<E: Pairing> {
+  gens_pc: PolyCommitmentGens<E>,
 }
 
-impl R1CSGens {
+impl<E: Pairing> R1CSGens<E> {
   pub fn new(label: &'static [u8], _num_cons: usize, num_vars: usize) -> Self {
     let num_poly_vars = num_vars.log_2();
     let gens_pc = PolyCommitmentGens::new(num_poly_vars, label);
@@ -59,24 +61,28 @@ impl R1CSGens {
   }
 }
 
-impl R1CSProof {
+impl<E: Pairing> R1CSProof<E> {
   fn prove_phase_one(
     num_rounds: usize,
-    evals_tau: &mut DensePolynomial,
-    evals_Az: &mut DensePolynomial,
-    evals_Bz: &mut DensePolynomial,
-    evals_Cz: &mut DensePolynomial,
-    transcript: &mut PoseidonTranscript,
-  ) -> (SumcheckInstanceProof, Vec<Scalar>, Vec<Scalar>) {
+    evals_tau: &mut DensePolynomial<E::ScalarField>,
+    evals_Az: &mut DensePolynomial<E::ScalarField>,
+    evals_Bz: &mut DensePolynomial<E::ScalarField>,
+    evals_Cz: &mut DensePolynomial<E::ScalarField>,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+  ) -> (
+    SumcheckInstanceProof<E::ScalarField>,
+    Vec<E::ScalarField>,
+    Vec<E::ScalarField>,
+  ) {
     let comb_func =
-      |poly_tau_comp: &Scalar,
-       poly_A_comp: &Scalar,
-       poly_B_comp: &Scalar,
-       poly_C_comp: &Scalar|
-       -> Scalar { (*poly_tau_comp) * ((*poly_A_comp) * poly_B_comp - poly_C_comp) };
+      |poly_tau_comp: &E::ScalarField,
+       poly_A_comp: &E::ScalarField,
+       poly_B_comp: &E::ScalarField,
+       poly_C_comp: &E::ScalarField|
+       -> E::ScalarField { (*poly_tau_comp) * ((*poly_A_comp) * poly_B_comp - poly_C_comp) };
 
     let (sc_proof_phase_one, r, claims) = SumcheckInstanceProof::prove_cubic_with_additive_term(
-      &Scalar::zero(), // claim is zero
+      &E::ScalarField::zero(), // claim is zero
       num_rounds,
       evals_tau,
       evals_Az,
@@ -91,13 +97,18 @@ impl R1CSProof {
 
   fn prove_phase_two(
     num_rounds: usize,
-    claim: &Scalar,
-    evals_z: &mut DensePolynomial,
-    evals_ABC: &mut DensePolynomial,
-    transcript: &mut PoseidonTranscript,
-  ) -> (SumcheckInstanceProof, Vec<Scalar>, Vec<Scalar>) {
-    let comb_func =
-      |poly_A_comp: &Scalar, poly_B_comp: &Scalar| -> Scalar { (*poly_A_comp) * poly_B_comp };
+    claim: &E::ScalarField,
+    evals_z: &mut DensePolynomial<E::ScalarField>,
+    evals_ABC: &mut DensePolynomial<E::ScalarField>,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+  ) -> (
+    SumcheckInstanceProof<E::ScalarField>,
+    Vec<E::ScalarField>,
+    Vec<E::ScalarField>,
+  ) {
+    let comb_func = |poly_A_comp: &E::ScalarField,
+                     poly_B_comp: &E::ScalarField|
+     -> E::ScalarField { (*poly_A_comp) * poly_B_comp };
     let (sc_proof_phase_two, r, claims) = SumcheckInstanceProof::prove_quad(
       claim, num_rounds, evals_z, evals_ABC, comb_func, transcript,
     );
@@ -110,12 +121,12 @@ impl R1CSProof {
   }
 
   pub fn prove(
-    inst: &R1CSInstance,
-    vars: Vec<Scalar>,
-    input: &[Scalar],
-    gens: &R1CSGens,
-    transcript: &mut PoseidonTranscript,
-  ) -> (R1CSProof, Vec<Scalar>, Vec<Scalar>) {
+    inst: &R1CSInstance<E::ScalarField>,
+    vars: Vec<E::ScalarField>,
+    input: &[E::ScalarField],
+    gens: &R1CSGens<E>,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+  ) -> (Self, Vec<E::ScalarField>, Vec<E::ScalarField>) {
     let timer_prove = Timer::new("R1CSProof::prove");
     // we currently require the number of |inputs| + 1 to be at most number of vars
     assert!(input.len() < vars.len());
@@ -148,9 +159,9 @@ impl R1CSProof {
       let num_inputs = input.len();
       let num_vars = vars.len();
       let mut z = vars;
-      z.extend(&vec![Scalar::one()]); // add constant term in z
+      z.extend(&vec![E::ScalarField::one()]); // add constant term in z
       z.extend(input);
-      z.extend(&vec![Scalar::zero(); num_vars - num_inputs - 1]); // we will pad with zeros
+      z.extend(&vec![E::ScalarField::zero(); num_vars - num_inputs - 1]); // we will pad with zeros
       z
     };
 
@@ -201,7 +212,7 @@ impl R1CSProof {
       assert_eq!(evals_A.len(), evals_C.len());
       (0..evals_A.len())
         .map(|i| r_A * evals_A[i] + r_B * evals_B[i] + r_C * evals_C[i])
-        .collect::<Vec<Scalar>>()
+        .collect::<Vec<_>>()
     };
 
     // another instance of the sum-check protocol
@@ -257,10 +268,10 @@ impl R1CSProof {
     &self,
     num_vars: usize,
     num_cons: usize,
-    input: &[Scalar],
-    evals: &(Scalar, Scalar, Scalar),
-    transcript: &mut PoseidonTranscript,
-    gens: &R1CSGens,
+    input: &[E::ScalarField],
+    evals: &(E::ScalarField, E::ScalarField, E::ScalarField),
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+    gens: &R1CSGens<E>,
   ) -> Result<(u128, u128, u128), ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
     let mut bytes = Vec::new();
@@ -272,7 +283,7 @@ impl R1CSProof {
 
     let c = transcript.challenge_scalar();
 
-    let mut input_as_sparse_poly_entries = vec![SparsePolyEntry::new(0, Scalar::one())];
+    let mut input_as_sparse_poly_entries = vec![SparsePolyEntry::new(0, E::ScalarField::one())];
     //remaining inputs
     input_as_sparse_poly_entries.extend(
       (0..input.len())
@@ -353,10 +364,10 @@ impl R1CSProof {
     &self,
     num_vars: usize,
     num_cons: usize,
-    input: &[Scalar],
-    evals: &(Scalar, Scalar, Scalar),
-    transcript: &mut PoseidonTranscript,
-    _gens: &R1CSGens,
+    input: &[E::ScalarField],
+    evals: &(E::ScalarField, E::ScalarField, E::ScalarField),
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+    _gens: &R1CSGens<E>,
   ) -> Result<usize, ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
     let mut bytes = Vec::new();
@@ -368,7 +379,7 @@ impl R1CSProof {
 
     let c = transcript.challenge_scalar();
 
-    let mut input_as_sparse_poly_entries = vec![SparsePolyEntry::new(0, Scalar::one())];
+    let mut input_as_sparse_poly_entries = vec![SparsePolyEntry::new(0, E::ScalarField::one())];
     //remaining inputs
     input_as_sparse_poly_entries.extend(
       (0..input.len())
@@ -399,7 +410,7 @@ impl R1CSProof {
 
     let _rng = ark_std::test_rng();
     let circuit = R1CSVerificationCircuit::new(&config);
-    let cs = ConstraintSystem::<Fr>::new_ref();
+    let cs = ConstraintSystem::<E::ScalarField>::new_ref();
     circuit.generate_constraints(cs.clone()).unwrap();
     assert!(cs.is_satisfied().unwrap());
 
@@ -429,10 +440,12 @@ mod tests {
   use crate::parameters::poseidon_params;
 
   use super::*;
+  type F = ark_bls12_377::Fr;
+  type E = ark_bls12_377::Bls12_377;
 
   use ark_std::UniformRand;
 
-  fn produce_tiny_r1cs() -> (R1CSInstance, Vec<Scalar>, Vec<Scalar>) {
+  fn produce_tiny_r1cs() -> (R1CSInstance<F>, Vec<F>, Vec<F>) {
     // three constraints over five variables Z1, Z2, Z3, Z4, and Z5
     // rounded to the nearest power of two
     let num_cons = 128;
@@ -440,11 +453,11 @@ mod tests {
     let num_inputs = 2;
 
     // encode the above constraints into three matrices
-    let mut A: Vec<(usize, usize, Scalar)> = Vec::new();
-    let mut B: Vec<(usize, usize, Scalar)> = Vec::new();
-    let mut C: Vec<(usize, usize, Scalar)> = Vec::new();
+    let mut A: Vec<(usize, usize, F)> = Vec::new();
+    let mut B: Vec<(usize, usize, F)> = Vec::new();
+    let mut C: Vec<(usize, usize, F)> = Vec::new();
 
-    let one = Scalar::one();
+    let one = F::one();
     // constraint 0 entries
     // (Z1 + Z2) * I0 - Z3 = 0;
     A.push((0, 0, one));
@@ -467,22 +480,22 @@ mod tests {
 
     // compute a satisfying assignment
     let mut rng = ark_std::rand::thread_rng();
-    let i0 = Scalar::rand(&mut rng);
-    let i1 = Scalar::rand(&mut rng);
-    let z1 = Scalar::rand(&mut rng);
-    let z2 = Scalar::rand(&mut rng);
+    let i0 = F::rand(&mut rng);
+    let i1 = F::rand(&mut rng);
+    let z1 = F::rand(&mut rng);
+    let z2 = F::rand(&mut rng);
     let z3 = (z1 + z2) * i0; // constraint 1: (Z1 + Z2) * I0 - Z3 = 0;
     let z4 = (z1 + i1) * z3; // constraint 2: (Z1 + I1) * (Z3) - Z4 = 0
-    let z5 = Scalar::zero(); //constraint 3
+    let z5 = F::zero(); //constraint 3
 
-    let mut vars = vec![Scalar::zero(); num_vars];
+    let mut vars = vec![F::zero(); num_vars];
     vars[0] = z1;
     vars[1] = z2;
     vars[2] = z3;
     vars[3] = z4;
     vars[4] = z5;
 
-    let mut input = vec![Scalar::zero(); num_inputs];
+    let mut input = vec![F::zero(); num_inputs];
     input[0] = i0;
     input[1] = i1;
 

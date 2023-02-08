@@ -1,24 +1,18 @@
 #![allow(clippy::too_many_arguments)]
 
-use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
+use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::{Transcript, TranscriptWriter};
 
 use super::commitments::{Commitments, MultiCommitGens};
 use super::errors::ProofVerifyError;
-use super::group::{
-  CompressGroupElement, CompressedGroup, DecompressGroupElement, GroupElement,
-  VartimeMultiscalarMul,
-};
 use super::math::Math;
 use super::nizk::{DotProductProofGens, DotProductProofLog};
-use super::scalar::Scalar;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::{pairing::Pairing, CurveGroup};
-use ark_ff::Field;
 use ark_ff::{One, PrimeField, UniformRand, Zero};
-use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
+use ark_poly::{MultilinearExtension};
 use ark_poly_commit::multilinear_pc::data_structures::{
-  Commitment, CommitterKey, Proof, UniversalParams, VerifierKey,
+  CommitterKey, VerifierKey,
 };
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::*;
@@ -62,11 +56,11 @@ impl<F: PrimeField> MultilinearExtension<F> for DensePolynomial<F> {
     unimplemented!()
   }
 
-  fn fix_variables(&self, _partial_point: &[Scalar]) -> Self {
+  fn fix_variables(&self, _partial_point: &[F]) -> Self {
     unimplemented!()
   }
 
-  fn to_evaluations(&self) -> Vec<Scalar> {
+  fn to_evaluations(&self) -> Vec<F> {
     self.Z.to_vec()
   }
 }
@@ -132,8 +126,8 @@ impl<'a, 'b, F: PrimeField> AddAssign<&'a DensePolynomial<F>> for DensePolynomia
   }
 }
 
-impl<'a, 'b, F: PrimeField> AddAssign<(Scalar, &'a DensePolynomial<F>)> for DensePolynomial<F> {
-  fn add_assign(&mut self, (scalar, other): (Scalar, &'a DensePolynomial<F>)) {
+impl<'a, 'b, F: PrimeField> AddAssign<(F, &'a DensePolynomial<F>)> for DensePolynomial<F> {
+  fn add_assign(&mut self, (scalar, other): (F, &'a DensePolynomial<F>)) {
     let other = Self {
       num_vars: other.num_vars,
       len: 1 << other.num_vars,
@@ -200,8 +194,8 @@ impl<E: Pairing> PolyCommitmentGens<E> {
     // Generates the SRS and trims it based on the number of variables in the
     // multilinear polynomial.
     let mut rng = ark_std::test_rng();
-    let pst_gens = MultilinearPC::<I>::setup(num_vars / 2, &mut rng);
-    let (ck, vk) = MultilinearPC::<I>::trim(&pst_gens, num_vars / 2);
+    let pst_gens = MultilinearPC::<E>::setup(num_vars / 2, &mut rng);
+    let (ck, vk) = MultilinearPC::<E>::trim(&pst_gens, num_vars / 2);
 
     PolyCommitmentGens { gens, ck, vk }
   }
@@ -308,7 +302,7 @@ impl<F: PrimeField> DensePolynomial<F> {
     self.len
   }
 
-  pub fn clone(&self) -> Self  {
+  pub fn clone(&self) -> Self {
     DensePolynomial::new(self.Z[0..self.len].to_vec())
   }
 
@@ -436,7 +430,7 @@ impl<F: PrimeField> DensePolynomial<F> {
   where
     I: IntoIterator<Item = &'a DensePolynomial<F>>,
   {
-    let mut Z: Vec<Scalar> = Vec::new();
+    let mut Z: Vec<F> = Vec::new();
     for poly in polys.into_iter() {
       Z.extend(poly.vec());
     }
@@ -457,7 +451,7 @@ impl<F: PrimeField> DensePolynomial<F> {
 }
 
 impl<F: PrimeField> Index<usize> for DensePolynomial<F> {
-  type Output = Scalar;
+  type Output = F;
 
   #[inline(always)]
   fn index(&self, _index: usize) -> &F {
@@ -505,7 +499,7 @@ where
     let R_size = right_num_vars.pow2();
 
     let default_blinds = PolyCommitmentBlinds {
-      blinds: vec![Scalar::zero(); L_size],
+      blinds: vec![E::ScalarField::zero(); L_size],
     };
     let blinds = blinds_opt.map_or(&default_blinds, |p| p);
 
@@ -529,7 +523,7 @@ where
     let (proof, _C_LR, C_Zr_prime) = DotProductProofLog::prove(
       &gens.gens,
       transcript,
-      &LZ,
+      LZ.as_slice(),
       &LZ_blind,
       &R,
       Zr,
@@ -543,8 +537,8 @@ where
     &self,
     gens: &PolyCommitmentGens<E>,
     transcript: &mut PoseidonTranscript<E::ScalarField>,
-    r: &[E::ScalarField],           // point at which the polynomial is evaluated
-    C_Zr: &E::G1, // commitment to \widetilde{Z}(r)
+    r: &[E::ScalarField], // point at which the polynomial is evaluated
+    C_Zr: &E::G1,         // commitment to \widetilde{Z}(r)
     comm: &PolyCommitment<E::G1>,
   ) -> Result<(), ProofVerifyError> {
     // transcript.append_protocol_name(PolyEvalProof::protocol_name());
@@ -554,13 +548,9 @@ where
     let (L, R) = eq.compute_factored_evals();
 
     // compute a weighted sum of commitments and L
-    let C_decompressed = comm
-      .C
-      .iter()
-      .map(|pt| GroupElement::decompress(pt).unwrap())
-      .collect::<Vec<GroupElement>>();
+    let C_decompressed = comm.C;
 
-    let C_LZ = GroupElement::vartime_multiscalar_mul(&L, C_decompressed.as_slice()).compress();
+    let C_LZ = <E::G1 as VariableBaseMSM>::msm(&C_decompressed, &L).compress();
 
     self
       .proof
@@ -576,7 +566,9 @@ where
     comm: &PolyCommitment<E::G1>,
   ) -> Result<(), ProofVerifyError> {
     // compute a commitment to Zr with a blind of zero
-    let C_Zr = Zr.commit(&Scalar::zero(), &gens.gens.gens_1).compress();
+    let C_Zr = Zr
+      .commit(&E::ScalarField::zero(), &gens.gens.gens_1)
+      .compress();
 
     self.verify(gens, transcript, r, &C_Zr, comm)
   }
@@ -590,7 +582,10 @@ mod tests {
   use super::*;
   use ark_std::UniformRand;
 
-  fn evaluate_with_LR(Z: &[Scalar], r: &[Scalar]) -> Scalar {
+  type F = ark_bls12_377::Fr;
+  type E = ark_bls12_377::Bls12_377;
+
+  fn evaluate_with_LR(Z: &[F], r: &[F]) -> F {
     let eq = EqPolynomial::new(r.to_vec());
     let (L, R) = eq.compute_factored_evals();
 
@@ -605,7 +600,7 @@ mod tests {
     // compute vector-matrix product between L and Z viewed as a matrix
     let LZ = (0..m)
       .map(|i| (0..m).map(|j| L[j] * Z[j * m + i]).sum())
-      .collect::<Vec<Scalar>>();
+      .collect::<Vec<F>>();
 
     // compute dot product between LZ and R
     DotProductProofLog::compute_dotproduct(&LZ, &R)
@@ -614,27 +609,22 @@ mod tests {
   #[test]
   fn check_polynomial_evaluation() {
     // Z = [1, 2, 1, 4]
-    let Z = vec![
-      Scalar::one(),
-      Scalar::from(2),
-      Scalar::from(1),
-      Scalar::from(4),
-    ];
+    let Z = vec![F::one(), F::from(2), F::from(1), F::from(4)];
 
     // r = [4,3]
-    let r = vec![Scalar::from(4), Scalar::from(3)];
+    let r = vec![F::from(4), F::from(3)];
 
     let eval_with_LR = evaluate_with_LR(&Z, &r);
     let poly = DensePolynomial::new(Z);
 
     let eval = poly.evaluate(&r);
-    assert_eq!(eval, Scalar::from(28));
+    assert_eq!(eval, F::from(28));
     assert_eq!(eval_with_LR, eval);
   }
 
-  pub fn compute_factored_chis_at_r(r: &[Scalar]) -> (Vec<Scalar>, Vec<Scalar>) {
-    let mut L: Vec<Scalar> = Vec::new();
-    let mut R: Vec<Scalar> = Vec::new();
+  pub fn compute_factored_chis_at_r(r: &[F]) -> (Vec<F>, Vec<F>) {
+    let mut L: Vec<F> = Vec::new();
+    let mut R: Vec<F> = Vec::new();
 
     let ell = r.len();
     assert!(ell % 2 == 0); // ensure ell is even
@@ -643,13 +633,13 @@ mod tests {
 
     // compute row vector L
     for i in 0..m {
-      let mut chi_i = Scalar::one();
+      let mut chi_i = F::one();
       for j in 0..ell / 2 {
         let bit_j = ((m * i) & (1 << (r.len() - j - 1))) > 0;
         if bit_j {
           chi_i *= r[j];
         } else {
-          chi_i *= Scalar::one() - r[j];
+          chi_i *= F::one() - r[j];
         }
       }
       L.push(chi_i);
@@ -657,13 +647,13 @@ mod tests {
 
     // compute column vector R
     for i in 0..m {
-      let mut chi_i = Scalar::one();
+      let mut chi_i = F::one();
       for j in ell / 2..ell {
         let bit_j = (i & (1 << (r.len() - j - 1))) > 0;
         if bit_j {
           chi_i *= r[j];
         } else {
-          chi_i *= Scalar::one() - r[j];
+          chi_i *= F::one() - r[j];
         }
       }
       R.push(chi_i);
@@ -671,18 +661,18 @@ mod tests {
     (L, R)
   }
 
-  pub fn compute_chis_at_r(r: &[Scalar]) -> Vec<Scalar> {
+  pub fn compute_chis_at_r(r: &[F]) -> Vec<F> {
     let ell = r.len();
     let n = ell.pow2();
-    let mut chis: Vec<Scalar> = Vec::new();
+    let mut chis: Vec<F> = Vec::new();
     for i in 0..n {
-      let mut chi_i = Scalar::one();
+      let mut chi_i = F::one();
       for j in 0..r.len() {
         let bit_j = (i & (1 << (r.len() - j - 1))) > 0;
         if bit_j {
           chi_i *= r[j];
         } else {
-          chi_i *= Scalar::one() - r[j];
+          chi_i *= F::one() - r[j];
         }
       }
       chis.push(chi_i);
@@ -690,14 +680,14 @@ mod tests {
     chis
   }
 
-  pub fn compute_outerproduct(L: Vec<Scalar>, R: Vec<Scalar>) -> Vec<Scalar> {
+  pub fn compute_outerproduct(L: Vec<F>, R: Vec<F>) -> Vec<F> {
     assert_eq!(L.len(), R.len());
     (0..L.len())
-      .map(|i| (0..R.len()).map(|j| L[i] * R[j]).collect::<Vec<Scalar>>())
-      .collect::<Vec<Vec<Scalar>>>()
+      .map(|i| (0..R.len()).map(|j| L[i] * R[j]).collect::<Vec<F>>())
+      .collect::<Vec<Vec<F>>>()
       .into_iter()
       .flatten()
-      .collect::<Vec<Scalar>>()
+      .collect::<Vec<F>>()
   }
 
   #[test]
@@ -705,9 +695,9 @@ mod tests {
     let mut rng = ark_std::rand::thread_rng();
 
     let s = 10;
-    let mut r: Vec<Scalar> = Vec::new();
+    let mut r: Vec<F> = Vec::new();
     for _i in 0..s {
-      r.push(Scalar::rand(&mut rng));
+      r.push(F::rand(&mut rng));
     }
     let chis = tests::compute_chis_at_r(&r);
     let chis_m = EqPolynomial::new(r).evals();
@@ -719,9 +709,9 @@ mod tests {
     let mut rng = ark_std::rand::thread_rng();
 
     let s = 10;
-    let mut r: Vec<Scalar> = Vec::new();
+    let mut r: Vec<F> = Vec::new();
     for _i in 0..s {
-      r.push(Scalar::rand(&mut rng));
+      r.push(F::rand(&mut rng));
     }
     let chis = EqPolynomial::new(r.clone()).evals();
     let (L, R) = EqPolynomial::new(r).compute_factored_evals();
@@ -734,9 +724,9 @@ mod tests {
     let mut rng = ark_std::rand::thread_rng();
 
     let s = 10;
-    let mut r: Vec<Scalar> = Vec::new();
+    let mut r: Vec<F> = Vec::new();
     for _i in 0..s {
-      r.push(Scalar::rand(&mut rng));
+      r.push(F::rand(&mut rng));
     }
     let (L, R) = tests::compute_factored_chis_at_r(&r);
     let eq = EqPolynomial::new(r);
@@ -747,23 +737,17 @@ mod tests {
 
   #[test]
   fn check_polynomial_commit() {
-    let Z = vec![
-      Scalar::from(1),
-      Scalar::from(2),
-      Scalar::from(1),
-      Scalar::from(4),
-    ];
+    let Z = vec![F::from(1), F::from(2), F::from(1), F::from(4)];
     let poly = DensePolynomial::new(Z);
 
     // r = [4,3]
-    let r = vec![Scalar::from(4), Scalar::from(3)];
+    let r = vec![F::from(4), F::from(3)];
     let eval = poly.evaluate(&r);
-    assert_eq!(eval, Scalar::from(28));
+    assert_eq!(eval, F::from(28));
 
     let gens = PolyCommitmentGens::new(poly.get_num_vars(), b"test-two");
     let (poly_commitment, blinds) = poly.commit(&gens, None);
 
-    let mut random_tape = RandomTape::new(b"proof");
     let params = poseidon_params();
     let mut prover_transcript = PoseidonTranscript::new(&params);
     let (proof, C_Zr) = PolyEvalProof::prove(
@@ -774,7 +758,6 @@ mod tests {
       None,
       &gens,
       &mut prover_transcript,
-      &mut random_tape,
     );
 
     let mut verifier_transcript = PoseidonTranscript::new(&params);

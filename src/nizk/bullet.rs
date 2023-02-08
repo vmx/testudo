@@ -7,7 +7,6 @@ use crate::math::Math;
 use crate::poseidon_transcript::PoseidonTranscript;
 
 use super::super::errors::ProofVerifyError;
-use super::super::scalar::Scalar;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_serialize::*;
@@ -33,7 +32,7 @@ impl<G: CurveGroup> BulletReductionProof<G> {
   /// The lengths of the vectors must all be the same, and must all be
   /// either 0 or a power of 2.
   pub fn prove(
-    transcript: &mut PoseidonTranscript,
+    transcript: &mut PoseidonTranscript<G::ScalarField>,
     Q: &G,
     G_vec: &[G],
     H: &G,
@@ -95,7 +94,8 @@ impl<G: CurveGroup> BulletReductionProof<G> {
           .chain(iter::once(&c_L))
           .chain(iter::once(blind_L))
           .copied()
-          .collect::<Vec<G::ScalarField>>(),
+          .collect::<Vec<G::ScalarField>>()
+          .as_slice(),
       );
 
       let R = G::msm(
@@ -110,7 +110,8 @@ impl<G: CurveGroup> BulletReductionProof<G> {
           .chain(iter::once(&c_R))
           .chain(iter::once(blind_R))
           .copied()
-          .collect::<Vec<G::ScalarField>>(),
+          .collect::<Vec<G::ScalarField>>()
+          .as_slice(),
       );
 
       transcript.append_point(&L.compress());
@@ -181,10 +182,10 @@ impl<G: CurveGroup> BulletReductionProof<G> {
     }
 
     // 2. Compute 1/(u_k...u_1) and 1/u_k, ..., 1/u_1
-    let mut challenges_inv: Vec<Scalar> = challenges.clone();
+    let mut challenges_inv: Vec<G::ScalarField> = challenges.clone();
 
     ark_ff::fields::batch_inversion(&mut challenges_inv);
-    let mut allinv: Scalar = Scalar::one();
+    let mut allinv = G::ScalarField::one();
     for c in challenges.iter().filter(|s| !s.is_zero()) {
       allinv.mul_assign(c);
     }
@@ -239,7 +240,7 @@ impl<G: CurveGroup> BulletReductionProof<G> {
     let a_hat = inner_product(a, &s);
 
     let Gamma_hat = G::msm(
-        Ls.iter()
+      Ls.iter()
         .chain(Rs.iter())
         .chain(iter::once(Gamma))
         .copied()
@@ -251,7 +252,7 @@ impl<G: CurveGroup> BulletReductionProof<G> {
         .chain(iter::once(&G::ScalarField::one()))
         .copied()
         .collect::<Vec<G::ScalarField>>()
-        .as_slice()
+        .as_slice(),
     );
 
     Ok((G_hat, Gamma_hat, a_hat))
@@ -268,7 +269,7 @@ fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
     a.len() == b.len(),
     "inner_product(a,b): lengths of vectors do not match"
   );
-  let mut out = Scalar::zero();
+  let mut out = F::zero();
   for i in 0..a.len() {
     out += a[i] * b[i];
   }

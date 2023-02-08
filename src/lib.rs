@@ -29,7 +29,6 @@ mod nizk;
 mod product_tree;
 mod r1csinstance;
 mod r1csproof;
-mod scalar;
 mod sparse_mlpoly;
 mod sqrt_pst;
 mod sumcheck;
@@ -49,39 +48,40 @@ use ark_std::Zero;
 use core::cmp::max;
 use errors::{ProofVerifyError, R1CSError};
 
-use poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
+use poseidon_transcript::{PoseidonTranscript};
+use transcript::TranscriptWriter;
 use r1csinstance::{
   R1CSCommitment, R1CSCommitmentGens, R1CSDecommitment, R1CSEvalProof, R1CSInstance,
 };
 use r1csproof::{R1CSGens, R1CSProof};
-use random::RandomTape;
-use scalar::Scalar;
 
+use ark_ec::CurveGroup;
 use timer::Timer;
 
 /// `ComputationCommitment` holds a public preprocessed NP statement (e.g., R1CS)
-pub struct ComputationCommitment {
-  comm: R1CSCommitment,
+pub struct ComputationCommitment<G: CurveGroup> {
+  comm: R1CSCommitment<G>,
 }
 
+use ark_ff::PrimeField;
 /// `ComputationDecommitment` holds information to decommit `ComputationCommitment`
-pub struct ComputationDecommitment {
-  decomm: R1CSDecommitment,
+pub struct ComputationDecommitment<F: PrimeField> {
+  decomm: R1CSDecommitment<F>,
 }
 
 /// `Assignment` holds an assignment of values to either the inputs or variables in an `Instance`
 #[derive(Clone)]
-pub struct Assignment {
-  assignment: Vec<Scalar>,
+pub struct Assignment<F: PrimeField> {
+  assignment: Vec<F>,
 }
 
-impl Assignment {
+impl<F: PrimeField> Assignment<F> {
   /// Constructs a new `Assignment` from a vector
-  pub fn new(assignment: &Vec<Vec<u8>>) -> Result<Assignment, R1CSError> {
-    let bytes_to_scalar = |vec: &Vec<Vec<u8>>| -> Result<Vec<Scalar>, R1CSError> {
-      let mut vec_scalar: Vec<Scalar> = Vec::new();
+  pub fn new(assignment: &Vec<Vec<u8>>) -> Result<Self, R1CSError> {
+    let bytes_to_scalar = |vec: &Vec<Vec<u8>>| -> Result<Vec<F>, R1CSError> {
+      let mut vec_scalar: Vec<F> = Vec::new();
       for v in vec {
-        let val = Scalar::from_random_bytes(v.as_slice());
+        let val = F::from_random_bytes(v.as_slice());
         if let Some(v) = val {
           vec_scalar.push(v);
         } else {
@@ -104,13 +104,13 @@ impl Assignment {
   }
 
   /// pads Assignment to the specified length
-  fn pad(&self, len: usize) -> VarsAssignment {
+  fn pad(&self, len: usize) -> VarsAssignment<F> {
     // check that the new length is higher than current length
     assert!(len > self.assignment.len());
 
     let padded_assignment = {
       let mut padded_assignment = self.assignment.clone();
-      padded_assignment.extend(vec![Scalar::zero(); len - self.assignment.len()]);
+      padded_assignment.extend(vec![F::zero(); len - self.assignment.len()]);
       padded_assignment
     };
 
@@ -121,19 +121,19 @@ impl Assignment {
 }
 
 /// `VarsAssignment` holds an assignment of values to variables in an `Instance`
-pub type VarsAssignment = Assignment;
+pub type VarsAssignment<F> = Assignment<F>;
 
 /// `InputsAssignment` holds an assignment of values to variables in an `Instance`
-pub type InputsAssignment = Assignment;
+pub type InputsAssignment<F> = Assignment<F>;
 
 /// `Instance` holds the description of R1CS matrices and a hash of the matrices
 #[derive(Debug)]
-pub struct Instance {
-  inst: R1CSInstance,
+pub struct Instance<F: PrimeField> {
+  inst: R1CSInstance<F>,
   digest: Vec<u8>,
 }
 
-impl Instance {
+impl<F: PrimeField> Instance<F> {
   /// Constructs a new `Instance` and an associated satisfying assignment
   pub fn new(
     num_cons: usize,
@@ -142,7 +142,7 @@ impl Instance {
     A: &[(usize, usize, Vec<u8>)],
     B: &[(usize, usize, Vec<u8>)],
     C: &[(usize, usize, Vec<u8>)],
-  ) -> Result<Instance, R1CSError> {
+  ) -> Result<Self, R1CSError> {
     let (num_vars_padded, num_cons_padded) = {
       let num_vars_padded = {
         let mut num_vars_padded = num_vars;
@@ -176,8 +176,8 @@ impl Instance {
     };
 
     let bytes_to_scalar =
-      |tups: &[(usize, usize, Vec<u8>)]| -> Result<Vec<(usize, usize, Scalar)>, R1CSError> {
-        let mut mat: Vec<(usize, usize, Scalar)> = Vec::new();
+      |tups: &[(usize, usize, Vec<u8>)]| -> Result<Vec<(usize, usize, F)>, R1CSError> {
+        let mut mat: Vec<(usize, usize, F)> = Vec::new();
         for (row, col, val_bytes) in tups {
           // row must be smaller than num_cons
           if *row >= num_cons {
@@ -189,7 +189,7 @@ impl Instance {
             return Err(R1CSError::InvalidIndex);
           }
 
-          let val = Scalar::from_random_bytes(val_bytes.as_slice());
+          let val = F::from_random_bytes(val_bytes.as_slice());
           if let Some(v) = val {
             // if col >= num_vars, it means that it is referencing a 1 or input in the satisfying
             // assignment
@@ -207,7 +207,7 @@ impl Instance {
         // we do not need to pad otherwise because the dummy constraints are implicit in the sum-check protocol
         if num_cons == 0 || num_cons == 1 {
           for i in tups.len()..num_cons_padded {
-            mat.push((i, num_vars, Scalar::zero()));
+            mat.push((i, num_vars, F::zero()));
           }
         }
 
@@ -246,8 +246,8 @@ impl Instance {
   /// Checks if a given R1CSInstance is satisfiable with a given variables and inputs assignments
   pub fn is_sat(
     &self,
-    vars: &VarsAssignment,
-    inputs: &InputsAssignment,
+    vars: &VarsAssignment<F>,
+    inputs: &InputsAssignment<F>,
   ) -> Result<bool, R1CSError> {
     if vars.assignment.len() > self.inst.get_num_vars() {
       return Err(R1CSError::InvalidNumberOfInputs);
@@ -280,7 +280,7 @@ impl Instance {
     num_cons: usize,
     num_vars: usize,
     num_inputs: usize,
-  ) -> (Instance, VarsAssignment, InputsAssignment) {
+  ) -> (Instance<F>, VarsAssignment<F>, InputsAssignment<F>) {
     let (inst, vars, inputs) = R1CSInstance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
     let digest = inst.get_digest();
     (
@@ -292,12 +292,12 @@ impl Instance {
 }
 
 /// `SNARKGens` holds public parameters for producing and verifying proofs with the Spartan SNARK
-pub struct SNARKGens {
-  gens_r1cs_sat: R1CSGens,
-  gens_r1cs_eval: R1CSCommitmentGens,
+pub struct SNARKGens<E: Pairing> {
+  gens_r1cs_sat: R1CSGens<E>,
+  gens_r1cs_eval: R1CSCommitmentGens<E>,
 }
 
-impl SNARKGens {
+impl<E: Pairing> SNARKGens<E> {
   /// Constructs a new `SNARKGens` given the size of the R1CS statement
   /// `num_nz_entries` specifies the maximum number of non-zero entries in any of the three R1CS matrices
   pub fn new(num_cons: usize, num_vars: usize, num_inputs: usize, num_nz_entries: usize) -> Self {
@@ -324,26 +324,30 @@ impl SNARKGens {
   }
 }
 
+use ark_ec::pairing::Pairing;
 /// `SNARK` holds a proof produced by Spartan SNARK
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
-pub struct SNARK {
-  r1cs_sat_proof: R1CSProof,
-  inst_evals: (Scalar, Scalar, Scalar),
-  r1cs_eval_proof: R1CSEvalProof,
-  rx: Vec<Scalar>,
-  ry: Vec<Scalar>,
+pub struct SNARK<E: Pairing> {
+  r1cs_sat_proof: R1CSProof<E>,
+  inst_evals: (E::ScalarField, E::ScalarField, E::ScalarField),
+  r1cs_eval_proof: R1CSEvalProof<E>,
+  rx: Vec<E::ScalarField>,
+  ry: Vec<E::ScalarField>,
 }
 
-impl SNARK {
+impl<E: Pairing> SNARK<E> {
   fn protocol_name() -> &'static [u8] {
     b"Spartan SNARK proof"
   }
 
   /// A public computation to create a commitment to an R1CS instance
   pub fn encode(
-    inst: &Instance,
-    gens: &SNARKGens,
-  ) -> (ComputationCommitment, ComputationDecommitment) {
+    inst: &Instance<E::ScalarField>,
+    gens: &SNARKGens<E>,
+  ) -> (
+    ComputationCommitment<E::G1>,
+    ComputationDecommitment<E::ScalarField>,
+  ) {
     let timer_encode = Timer::new("SNARK::encode");
     let (comm, decomm) = inst.inst.commit(&gens.gens_r1cs_eval);
     timer_encode.stop();
@@ -355,19 +359,15 @@ impl SNARK {
 
   /// A method to produce a SNARK proof of the satisfiability of an R1CS instance
   pub fn prove(
-    inst: &Instance,
-    comm: &ComputationCommitment,
-    decomm: &ComputationDecommitment,
-    vars: VarsAssignment,
-    inputs: &InputsAssignment,
-    gens: &SNARKGens,
-    transcript: &mut PoseidonTranscript,
+    inst: &Instance<E::ScalarField>,
+    comm: &ComputationCommitment<E::G1>,
+    decomm: &ComputationDecommitment<E::ScalarField>,
+    vars: VarsAssignment<E::ScalarField>,
+    inputs: &InputsAssignment<E::ScalarField>,
+    gens: &SNARKGens<E>,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
   ) -> Self {
     let timer_prove = Timer::new("SNARK::prove");
-
-    // we create a Transcript object seeded with a random Scalar
-    // to aid the prover produce its randomness
-    let mut random_tape = RandomTape::new(b"proof");
 
     // transcript.append_protocol_name(SNARK::protocol_name());
     comm.comm.append_to_poseidon(transcript);
@@ -391,7 +391,6 @@ impl SNARK {
           &inputs.assignment,
           &gens.gens_r1cs_sat,
           transcript,
-          // &mut random_tape,
         )
       };
 
@@ -431,7 +430,6 @@ impl SNARK {
         &inst_evals,
         &gens.gens_r1cs_eval,
         transcript,
-        &mut random_tape,
       );
 
       let mut proof_encoded: Vec<u8> = Vec::new();
@@ -455,10 +453,10 @@ impl SNARK {
   /// A method to verify the SNARK proof of the satisfiability of an R1CS instance
   pub fn verify(
     &self,
-    comm: &ComputationCommitment,
-    input: &InputsAssignment,
-    transcript: &mut PoseidonTranscript,
-    gens: &SNARKGens,
+    comm: &ComputationCommitment<E::G1>,
+    input: &InputsAssignment<E::ScalarField>,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+    gens: &SNARKGens<E>,
   ) -> Result<(u128, u128, u128), ProofVerifyError> {
     let timer_verify = Timer::new("SNARK::verify");
     // transcript.append_protocol_name(SNARK::protocol_name());
@@ -507,11 +505,11 @@ impl SNARK {
 
 #[derive(Clone)]
 /// `NIZKGens` holds public parameters for producing and verifying proofs with the Spartan NIZK
-pub struct NIZKGens {
-  gens_r1cs_sat: R1CSGens,
+pub struct NIZKGens<E: Pairing> {
+  gens_r1cs_sat: R1CSGens<E>,
 }
 
-impl NIZKGens {
+impl<E: Pairing> NIZKGens<E> {
   /// Constructs a new `NIZKGens` given the size of the R1CS statement
   pub fn new(num_cons: usize, num_vars: usize, num_inputs: usize) -> Self {
     let num_vars_padded = {
@@ -529,29 +527,25 @@ impl NIZKGens {
 
 /// `NIZK` holds a proof produced by Spartan NIZK
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
-pub struct NIZK {
-  r1cs_sat_proof: R1CSProof,
-  r: (Vec<Scalar>, Vec<Scalar>),
+pub struct NIZK<E: Pairing> {
+  r1cs_sat_proof: R1CSProof<E>,
+  r: (Vec<E::ScalarField>, Vec<E::ScalarField>),
 }
 
-impl NIZK {
+impl<E: Pairing> NIZK<E> {
   fn protocol_name() -> &'static [u8] {
     b"Spartan NIZK proof"
   }
 
   /// A method to produce a NIZK proof of the satisfiability of an R1CS instance
   pub fn prove(
-    inst: &Instance,
-    vars: VarsAssignment,
-    input: &InputsAssignment,
-    gens: &NIZKGens,
-    transcript: &mut PoseidonTranscript,
+    inst: &Instance<E::ScalarField>,
+    vars: VarsAssignment<E::ScalarField>,
+    input: &InputsAssignment<E::ScalarField>,
+    gens: &NIZKGens<E>,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
   ) -> Self {
     let timer_prove = Timer::new("NIZK::prove");
-    // we create a Transcript object seeded with a random Scalar
-    // to aid the prover produce its randomness
-    let _random_tape = RandomTape::new(b"proof");
-
     // transcript.append_protocol_name(NIZK::protocol_name());
     transcript.append_bytes(&inst.digest);
 
@@ -573,7 +567,6 @@ impl NIZK {
         &input.assignment,
         &gens.gens_r1cs_sat,
         transcript,
-        // &mut random_tape,
       );
       let mut proof_encoded = Vec::new();
       proof
@@ -593,10 +586,10 @@ impl NIZK {
   /// A method to verify a NIZK proof of the satisfiability of an R1CS instance
   pub fn verify(
     &self,
-    inst: &Instance,
-    input: &InputsAssignment,
-    transcript: &mut PoseidonTranscript,
-    gens: &NIZKGens,
+    inst: &Instance<E::ScalarField>,
+    input: &InputsAssignment<E::ScalarField>,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+    gens: &NIZKGens<E>,
   ) -> Result<usize, ProofVerifyError> {
     let timer_verify = Timer::new("NIZK::verify");
 
@@ -633,10 +626,10 @@ impl NIZK {
   /// A method to verify a NIZK proof of the satisfiability of an R1CS instance with Groth16
   pub fn verify_groth16(
     &self,
-    inst: &Instance,
-    input: &InputsAssignment,
-    transcript: &mut PoseidonTranscript,
-    gens: &NIZKGens,
+    inst: &Instance<E::ScalarField>,
+    input: &InputsAssignment<E::ScalarField>,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+    gens: &NIZKGens<E>,
   ) -> Result<(u128, u128, u128), ProofVerifyError> {
     let timer_verify = Timer::new("NIZK::verify");
 
@@ -678,6 +671,8 @@ mod tests {
 
   use super::*;
   use ark_ff::{BigInteger, One, PrimeField};
+  type F = ark_bls12_377::Fr;
+  type E = ark_bls12_377::Bls12_377;
 
   #[test]
   pub fn check_snark() {
@@ -775,28 +770,20 @@ mod tests {
     let mut C: Vec<(usize, usize, Vec<u8>)> = Vec::new();
 
     // Create a^2 + b + 13
-    A.push((0, num_vars + 2, (Scalar::one().into_bigint().to_bytes_le()))); // 1*a
-    B.push((0, num_vars + 2, Scalar::one().into_bigint().to_bytes_le())); // 1*a
-    C.push((0, num_vars + 1, Scalar::one().into_bigint().to_bytes_le())); // 1*z
-    C.push((
-      0,
-      num_vars,
-      (-Scalar::from(13u64)).into_bigint().to_bytes_le(),
-    )); // -13*1
-    C.push((
-      0,
-      num_vars + 3,
-      (-Scalar::one()).into_bigint().to_bytes_le(),
-    )); // -1*b
+    A.push((0, num_vars + 2, (F::one().into_bigint().to_bytes_le()))); // 1*a
+    B.push((0, num_vars + 2, F::one().into_bigint().to_bytes_le())); // 1*a
+    C.push((0, num_vars + 1, F::one().into_bigint().to_bytes_le())); // 1*z
+    C.push((0, num_vars, (-F::from(13u64)).into_bigint().to_bytes_le())); // -13*1
+    C.push((0, num_vars + 3, (-F::one()).into_bigint().to_bytes_le())); // -1*b
 
     // Var Assignments (Z_0 = 16 is the only output)
-    let vars = vec![Scalar::zero().into_bigint().to_bytes_le(); num_vars];
+    let vars = vec![F::zero().into_bigint().to_bytes_le(); num_vars];
 
     // create an InputsAssignment (a = 1, b = 2)
-    let mut inputs = vec![Scalar::zero().into_bigint().to_bytes_le(); num_inputs];
-    inputs[0] = Scalar::from(16u64).into_bigint().to_bytes_le();
-    inputs[1] = Scalar::from(1u64).into_bigint().to_bytes_le();
-    inputs[2] = Scalar::from(2u64).into_bigint().to_bytes_le();
+    let mut inputs = vec![F::zero().into_bigint().to_bytes_le(); num_inputs];
+    inputs[0] = F::from(16u64).into_bigint().to_bytes_le();
+    inputs[1] = F::from(1u64).into_bigint().to_bytes_le();
+    inputs[2] = F::from(2u64).into_bigint().to_bytes_le();
 
     let assignment_inputs = InputsAssignment::new(&inputs).unwrap();
     let assignment_vars = VarsAssignment::new(&vars).unwrap();

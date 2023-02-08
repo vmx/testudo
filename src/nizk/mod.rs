@@ -4,8 +4,6 @@ use crate::poseidon_transcript::PoseidonTranscript;
 
 use super::commitments::{Commitments, MultiCommitGens};
 use super::errors::ProofVerifyError;
-use super::group::{CompressGroupElement, CompressedGroup, UnpackGroupElement};
-use super::scalar::Scalar;
 use ark_ec::CurveGroup;
 
 use ark_serialize::*;
@@ -33,8 +31,8 @@ pub struct DotProductProofLog<G: CurveGroup> {
   bullet_reduction_proof: BulletReductionProof<G>,
   delta: G,
   beta: G,
-  z1: Scalar,
-  z2: Scalar,
+  z1: G::ScalarField,
+  z2: G::ScalarField,
 }
 
 impl<G: CurveGroup> DotProductProofLog<G> {
@@ -192,6 +190,8 @@ mod tests {
 
   use super::*;
   use ark_std::UniformRand;
+  type F = ark_bls12_377::Fr;
+  
 
   #[test]
   fn check_dotproductproof_log() {
@@ -201,20 +201,18 @@ mod tests {
 
     let gens = DotProductProofGens::new(n, b"test-1024");
 
-    let x: Vec<Scalar> = (0..n).map(|_i| Scalar::rand(&mut rng)).collect();
-    let a: Vec<Scalar> = (0..n).map(|_i| Scalar::rand(&mut rng)).collect();
+    let x: Vec<F> = (0..n).map(|_i| F::rand(&mut rng)).collect();
+    let a: Vec<F> = (0..n).map(|_i| F::rand(&mut rng)).collect();
     let y = DotProductProofLog::compute_dotproduct(&x, &a);
 
-    let r_x = Scalar::rand(&mut rng);
-    let r_y = Scalar::rand(&mut rng);
+    let r_x = F::rand(&mut rng);
+    let r_y = F::rand(&mut rng);
 
     let params = poseidon_params();
-    let mut random_tape = RandomTape::new(b"proof");
     let mut prover_transcript = PoseidonTranscript::new(&params);
     let (proof, Cx, Cy) = DotProductProofLog::prove(
       &gens,
       &mut prover_transcript,
-      &mut random_tape,
       &x,
       &r_x,
       &a,

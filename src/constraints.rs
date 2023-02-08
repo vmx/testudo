@@ -1,34 +1,25 @@
 use ark_ec::pairing::Pairing;
-use std::{borrow::Borrow, vec};
+use std::{borrow::Borrow};
 
 use crate::{
-  group::Fq,
   math::Math,
   sparse_mlpoly::{SparsePolyEntry, SparsePolynomial},
   unipoly::UniPoly,
 };
 
-use ark_crypto_primitives::snark::{BooleanInputVar, SNARKGadget};
-use ark_snark::{CircuitSpecificSetupSNARK, SNARK};
-
-use ark_ff::{BitIteratorLE, PrimeField, Zero};
-use ark_groth16::{
-  constraints::{Groth16VerifierGadget, PreparedVerifyingKeyVar, ProofVar},
-  Groth16, PreparedVerifyingKey, Proof as GrothProof,
-};
+use ark_ff::{PrimeField, Zero};
 
 use ark_crypto_primitives::sponge::{
   constraints::CryptographicSpongeVar,
-  poseidon::{constraints::PoseidonSpongeVar, PoseidonConfig, PoseidonSponge},
+  poseidon::{constraints::PoseidonSpongeVar, PoseidonConfig},
 };
 use ark_poly_commit::multilinear_pc::data_structures::Commitment;
 use ark_r1cs_std::{
   alloc::{AllocVar, AllocationMode},
   fields::fp::FpVar,
-  prelude::{Boolean, EqGadget, FieldVar},
+  prelude::{EqGadget, FieldVar},
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, Namespace, SynthesisError};
-use rand::{CryptoRng, Rng};
 
 pub struct PoseidonTranscripVar<F>
 where
@@ -39,7 +30,7 @@ where
   //pub params: PoseidonConfig<Fr>,
 }
 
-impl<F, P> PoseidonTranscripVar<F, P>
+impl<F> PoseidonTranscripVar<F>
 where
   F: PrimeField,
 {
@@ -54,7 +45,6 @@ where
     Self {
       cs,
       sponge,
-      //params: params.clone(),
     }
   }
 
@@ -85,8 +75,8 @@ pub struct UniPolyVar<F: PrimeField> {
   pub coeffs: Vec<FpVar<F>>,
 }
 
-impl<F: PrimeField> AllocVar<UniPoly<F>, F> for UniPolyVar {
-  fn new_variable<T: Borrow<UniPoly>>(
+impl<F: PrimeField> AllocVar<UniPoly<F>, F> for UniPolyVar<F> {
+  fn new_variable<T: Borrow<UniPoly<F>>>(
     cs: impl Into<Namespace<F>>,
     f: impl FnOnce() -> Result<T, SynthesisError>,
     mode: AllocationMode,
@@ -118,7 +108,7 @@ impl<F: PrimeField> UniPolyVar<F> {
   }
 
   // TODO check if mul without reduce can help
-  pub fn evaluate(&self, r: &FpVar<Fr>) -> FpVar<Fr> {
+  pub fn evaluate(&self, r: &FpVar<F>) -> FpVar<F> {
     let mut eval = self.coeffs[0].clone();
     let mut power = r.clone();
 
@@ -141,10 +131,10 @@ impl<F: PrimeField> SumcheckVerificationCircuit<F> {
     &self,
     poly_vars: &[UniPolyVar<F>],
     claim_var: &FpVar<F>,
-    transcript_var: &mut PoseidonTranscripVar,
-  ) -> Result<(FpVar<Fr>, Vec<FpVar<Fr>>), SynthesisError> {
+    transcript_var: &mut PoseidonTranscripVar<F>,
+  ) -> Result<(FpVar<F>, Vec<FpVar<F>>), SynthesisError> {
     let mut e_var = claim_var.clone();
-    let mut r_vars: Vec<FpVar<Fr>> = Vec::new();
+    let mut r_vars: Vec<FpVar<F>> = Vec::new();
 
     for (poly_var, _poly) in poly_vars.iter().zip(self.polys.iter()) {
       let res = poly_var.eval_at_one() + poly_var.eval_at_zero();
@@ -165,8 +155,8 @@ pub struct SparsePolyEntryVar<F: PrimeField> {
   val_var: FpVar<F>,
 }
 
-impl<F: PrimeField> AllocVar<SparsePolyEntry, F> for SparsePolyEntryVar<F> {
-  fn new_variable<T: Borrow<SparsePolyEntry>>(
+impl<F: PrimeField> AllocVar<SparsePolyEntry<F>, F> for SparsePolyEntryVar<F> {
+  fn new_variable<T: Borrow<SparsePolyEntry<F>>>(
     cs: impl Into<Namespace<F>>,
     f: impl FnOnce() -> Result<T, SynthesisError>,
     _mode: AllocationMode,
@@ -189,8 +179,8 @@ pub struct SparsePolynomialVar<F: PrimeField> {
   Z_var: Vec<SparsePolyEntryVar<F>>,
 }
 
-impl<F: PrimeField> AllocVar<SparsePolynomial, F> for SparsePolynomialVar {
-  fn new_variable<T: Borrow<SparsePolynomial>>(
+impl<F: PrimeField> AllocVar<SparsePolynomial<F>, F> for SparsePolynomialVar<F> {
+  fn new_variable<T: Borrow<SparsePolynomial<F>>>(
     cs: impl Into<Namespace<F>>,
     f: impl FnOnce() -> Result<T, SynthesisError>,
     mode: AllocationMode,
@@ -241,7 +231,7 @@ pub struct R1CSVerificationCircuit<F: PrimeField> {
   pub num_vars: usize,
   pub num_cons: usize,
   pub input: Vec<F>,
-  pub input_as_sparse_poly: SparsePolynomial,
+  pub input_as_sparse_poly: SparsePolynomial<F>,
   pub evals: (F, F, F),
   pub params: PoseidonConfig<F>,
   pub prev_challenge: F,
@@ -251,11 +241,11 @@ pub struct R1CSVerificationCircuit<F: PrimeField> {
   pub sc_phase2: SumcheckVerificationCircuit<F>,
   // The point on which the polynomial was evaluated by the prover.
   pub claimed_ry: Vec<F>,
-  pub claimed_transcript_sat_state: Fr,
+  pub claimed_transcript_sat_state: F,
 }
 
 impl<F: PrimeField> R1CSVerificationCircuit<F> {
-  fn new(config: &VerifierConfig<F>) -> Self {
+  pub fn new(config: &VerifierConfig<F>) -> Self {
     Self {
       num_vars: config.num_vars,
       num_cons: config.num_cons,
@@ -317,7 +307,7 @@ impl<F> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
 
     let tau_vars = transcript_var.challenge_vector(num_rounds_x)?;
 
-    let claim_phase1_var = FpVar::<F>::new_witness(cs.clone(), || Ok(Fr::zero()))?;
+    let claim_phase1_var = FpVar::<F>::new_witness(cs.clone(), || Ok(F::zero()))?;
 
     let (claim_post_phase1_var, rx_var) =
       self
@@ -403,21 +393,21 @@ impl<F> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
 }
 
 #[derive(Clone)]
-pub struct VerifierConfig {
-  pub comm: Commitment<I>,
+pub struct VerifierConfig<E: Pairing> {
+  pub comm: Commitment<E>,
   pub num_vars: usize,
   pub num_cons: usize,
-  pub input: Vec<Fr>,
-  pub input_as_sparse_poly: SparsePolynomial,
-  pub evals: (Fr, Fr, Fr),
-  pub params: PoseidonConfig<Fr>,
-  pub prev_challenge: Fr,
-  pub claims_phase2: (Fr, Fr, Fr, Fr),
-  pub eval_vars_at_ry: Fr,
-  pub polys_sc1: Vec<UniPoly>,
-  pub polys_sc2: Vec<UniPoly>,
-  pub ry: Vec<Scalar>,
-  pub transcript_sat_state: Scalar,
+  pub input: Vec<E::ScalarField>,
+  pub input_as_sparse_poly: SparsePolynomial<E::ScalarField>,
+  pub evals: (E::ScalarField, E::ScalarField, E::ScalarField),
+  pub params: PoseidonConfig<E::ScalarField>,
+  pub prev_challenge: E::ScalarField,
+  pub claims_phase2: (E::ScalarField, E::ScalarField, E::ScalarField, E::ScalarField),
+  pub eval_vars_at_ry: E::ScalarField,
+  pub polys_sc1: Vec<UniPoly<E::ScalarField>>,
+  pub polys_sc2: Vec<UniPoly<E::ScalarField>>,
+  pub ry: Vec<E::ScalarField>,
+  pub transcript_sat_state: E::ScalarField,
 }
 
 // Skeleton for the polynomial commitment verification circuit

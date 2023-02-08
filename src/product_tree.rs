@@ -4,7 +4,6 @@ use crate::poseidon_transcript::PoseidonTranscript;
 use super::dense_mlpoly::DensePolynomial;
 use super::dense_mlpoly::EqPolynomial;
 use super::math::Math;
-use super::scalar::Scalar;
 use super::sumcheck::SumcheckInstanceProof;
 use ark_ff::PrimeField;
 use ark_serialize::*;
@@ -28,7 +27,6 @@ impl<F: PrimeField> ProductCircuit<F> {
     let outp_right = (len / 4..len / 2)
       .map(|i| inp_left[i] * inp_right[i])
       .collect::<Vec<_>>();
-
     (
       DensePolynomial::new(outp_left),
       DensePolynomial::new(outp_right),
@@ -278,10 +276,9 @@ impl<F: PrimeField> ProductCircuitEvalProofBatched<F> {
       assert_eq!(poly_C_par.len(), len / 2);
 
       let num_rounds_prod = poly_C_par.len().log_2();
-      let comb_func_prod = |poly_A_comp: &F,
-                            poly_B_comp: &F,
-                            poly_C_comp: &F|
-       -> F { (*poly_A_comp) * poly_B_comp * poly_C_comp };
+      let comb_func_prod = |poly_A_comp: &F, poly_B_comp: &F, poly_C_comp: &F| -> F {
+        (*poly_A_comp) * poly_B_comp * poly_C_comp
+      };
 
       let mut poly_A_batched_par: Vec<&mut DensePolynomial<F>> = Vec::new();
       let mut poly_B_batched_par: Vec<&mut DensePolynomial<F>> = Vec::new();
@@ -419,10 +416,8 @@ impl<F: PrimeField> ProductCircuitEvalProofBatched<F> {
       }
 
       assert_eq!(rand.len(), rand_prod.len());
-      let eq: F= (0..rand.len())
-        .map(|i| {
-          rand[i] * rand_prod[i] + (F::one() - rand[i]) * (F::one() - rand_prod[i])
-        })
+      let eq: F = (0..rand.len())
+        .map(|i| rand[i] * rand_prod[i] + (F::one() - rand[i]) * (F::one() - rand_prod[i]))
         .product();
       let mut claim_expected: F = (0..claims_prod_vec.len())
         .map(|i| coeff_vec[i] * (claims_prod_left[i] * claims_prod_right[i] * eq))

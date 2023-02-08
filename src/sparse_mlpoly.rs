@@ -503,7 +503,7 @@ impl<F: PrimeField> SparseMatPolynomial<F> {
 }
 
 impl<F: PrimeField> MultiSparseMatPolynomialAsDense<F> {
-  pub fn deref(&self, row_mem_val: &[F], col_mem_val: &[F]) -> Derefs {
+  pub fn deref(&self, row_mem_val: &[F], col_mem_val: &[F]) -> Derefs<F> {
     let row_ops_val = self.row.deref(row_mem_val);
     let col_ops_val = self.col.deref(col_mem_val);
 
@@ -1467,7 +1467,7 @@ impl<E: Pairing> SparseMatPolyEvalProof<E> {
     evals: &[E::ScalarField], // a vector evaluation of \widetilde{M}(r = (rx,ry)) for each M
     gens: &SparseMatPolyCommitmentGens<E>,
     transcript: &mut PoseidonTranscript<E::ScalarField>,
-  ) -> SparseMatPolyEvalProof {
+  ) -> SparseMatPolyEvalProof<E> {
     // transcript.append_protocol_name(SparseMatPolyEvalProof::protocol_name());
 
     // ensure there is one eval for each polynomial in dense

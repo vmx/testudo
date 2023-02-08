@@ -180,7 +180,7 @@ impl<E: Pairing> Polynomial<E> {
 
     let a_vec: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
 
-    let c_u = <E::G1 as VariableBaseMSM>::msm_unchecked(&a_vec, &chis).into_affine();
+    let c_u = <E::G1 as VariableBaseMSM>::msm_unchecked(&a_vec, chis.as_slice()).into_affine();
     timer_msm.stop();
 
     let U: Commitment<E> = Commitment {
@@ -256,10 +256,7 @@ mod tests {
     let mut rng = ark_std::test_rng();
     let num_vars = 8;
     let len = 2_usize.pow(num_vars);
-    let Z: Vec<F> = (0..len)
-      .into_iter()
-      .map(|_| F::rand(&mut rng))
-      .collect();
+    let Z: Vec<F> = (0..len).into_iter().map(|_| F::rand(&mut rng)).collect();
     let r: Vec<F> = (0..num_vars)
       .into_iter()
       .map(|_| F::rand(&mut rng))
@@ -279,10 +276,7 @@ mod tests {
     let mut rng = ark_std::test_rng();
     let num_vars = 4;
     let len = 2_usize.pow(num_vars);
-    let Z: Vec<F> = (0..len)
-      .into_iter()
-      .map(|_| F::rand(&mut rng))
-      .collect();
+    let Z: Vec<F> = (0..len).into_iter().map(|_| F::rand(&mut rng)).collect();
     let r: Vec<F> = (0..num_vars)
       .into_iter()
       .map(|_| F::rand(&mut rng))
