@@ -1,4 +1,9 @@
-use crate::transcript::{Transcript, TranscriptWriter};
+use crate::{
+  constraints::PoseidonTranscripVar,
+  poseidon_transcript::{PoseidonTranscript, TranscriptWriter},
+  transcript::Transcript,
+};
+use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
 use ark_ff::{Field, PrimeField};
 use ark_serialize::*;
 // ax^2 + bx + c stored as vec![c,b,a]
@@ -80,7 +85,6 @@ impl<F: Field> UniPoly<F> {
   }
 }
 
-
 impl<F: PrimeField> CompressedUniPoly<F> {
   // we require eval(0) + eval(1) = hint, so we can solve for the linear term as:
   // linear_term = hint - 2 * constant_term - deg2 term - deg3 term
@@ -98,11 +102,11 @@ impl<F: PrimeField> CompressedUniPoly<F> {
   }
 }
 
-impl<F: PrimeField> TranscriptWriter for UniPoly<F> {
-  fn write_to_transcript(&self, transcript: &mut impl Transcript) {
+impl<F: PrimeField + Absorb> TranscriptWriter<F> for UniPoly<F> {
+  fn write_to_transcript(&self, transcript: &mut PoseidonTranscript<F>) {
     // transcript.append_message(label, b"UniPoly_begin");
     for i in 0..self.coeffs.len() {
-      transcript.append(b"", &self.coeffs[i]);
+      transcript.append_scalar(b"", &self.coeffs[i]);
     }
     // transcript.append_message(label, b"UniPoly_end");
   }

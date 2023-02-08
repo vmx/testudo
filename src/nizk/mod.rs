@@ -5,6 +5,7 @@ use crate::ark_std::UniformRand;
 use crate::math::Math;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::Transcript;
+use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::CurveGroup;
 
 use ark_serialize::*;
@@ -36,8 +37,10 @@ pub struct DotProductProofLog<G: CurveGroup> {
   z2: G::ScalarField,
 }
 
-impl<G: CurveGroup> DotProductProofLog<G> {
-
+impl<G> DotProductProofLog<G> 
+where
+G: CurveGroup,
+G::ScalarField: Absorb {
   pub fn prove(
     gens: &DotProductProofGens<G>,
     transcript: &mut PoseidonTranscript<G::ScalarField>,
@@ -69,11 +72,11 @@ impl<G: CurveGroup> DotProductProofLog<G> {
     };
 
     let Cx = PedersenCommit::commit_slice(x_vec, blind_x, &gens.gens_n);
-    transcript.append(b"", &Cx);
+    transcript.append_point(b"", &Cx);
 
     let Cy = PedersenCommit::commit_scalar(y, blind_y, &gens.gens_1);
-    transcript.append(b"", &Cy);
-    transcript.append(b"", &a_vec);
+    transcript.append_point(b"", &Cy);
+    transcript.append_scalar_vector(b"", &a_vec);
 
     let blind_Gamma = (*blind_x) + blind_y;
     let (bullet_reduction_proof, _Gamma_hat, x_hat, a_hat, g_hat, rhat_Gamma) =
@@ -97,10 +100,10 @@ impl<G: CurveGroup> DotProductProofLog<G> {
       };
       PedersenCommit::commit_scalar(&d, &r_delta, &gens_hat)
     };
-    transcript.append(b"", &delta);
+    transcript.append_point(b"", &delta);
 
     let beta = PedersenCommit::commit_scalar(&d, &r_beta, &gens.gens_1);
-    transcript.append(b"", &beta);
+    transcript.append_point(b"", &beta);
 
     let c: G::ScalarField = transcript.challenge_scalar(b"");
 
@@ -137,9 +140,9 @@ impl<G: CurveGroup> DotProductProofLog<G> {
     // Cy.write_to_transcript( transcript);
     // a.write_to_transcript( transcript);
 
-    transcript.append(b"", Cx);
-    transcript.append(b"", Cy);
-    transcript.append(b"", &a);
+    transcript.append_point(b"", Cx);
+    transcript.append_point(b"", Cy);
+    transcript.append_scalar_vector(b"", &a);
 
     let Gamma = Cx.add(Cy);
 
@@ -150,8 +153,8 @@ impl<G: CurveGroup> DotProductProofLog<G> {
     // self.delta.write_to_transcript( transcript);
     // self.beta.write_to_transcript( transcript);
 
-    transcript.append(b"", &self.delta);
-    transcript.append(b"", &self.beta);
+    transcript.append_point(b"", &self.delta);
+    transcript.append_point(b"", &self.beta);
 
     let c = transcript.challenge_scalar(b"");
 

@@ -13,6 +13,4 @@ pub trait Transcript {
   }
 }
 
-pub trait TranscriptWriter {
-  fn write_to_transcript(&self, transcript: &mut impl Transcript);
-}
+pub use crate::poseidon_transcript::TranscriptWriter;

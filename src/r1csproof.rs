@@ -7,8 +7,9 @@ use crate::mipp::MippProof;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
-use crate::transcript::{Transcript};
+use crate::transcript::Transcript;
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
+use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::pairing::Pairing;
 
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
@@ -61,7 +62,11 @@ impl<E: Pairing> R1CSGens<E> {
   }
 }
 
-impl<E: Pairing> R1CSProof<E> {
+impl<E> R1CSProof<E>
+where
+  E: Pairing,
+  E::ScalarField: Absorb,
+{
   fn prove_phase_one(
     num_rounds: usize,
     evals_tau: &mut DensePolynomial<E::ScalarField>,
@@ -116,7 +121,6 @@ impl<E: Pairing> R1CSProof<E> {
     (sc_proof_phase_two, r, claims)
   }
 
-
   pub fn prove(
     inst: &R1CSInstance<E::ScalarField>,
     vars: Vec<E::ScalarField>,
@@ -137,9 +141,7 @@ impl<E: Pairing> R1CSProof<E> {
     // commitment list to the satisfying witness polynomial list
     let (comm_list, t) = pl.commit(&gens.gens_pc.ck);
 
-    let mut bytes = Vec::new();
-    t.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
-    transcript.append(b"", &bytes);
+    transcript.append_gt::<E>(b"", &t);
 
     // comm.write_to_transcript(transcript);
     timer_commit.stop();
@@ -147,7 +149,7 @@ impl<E: Pairing> R1CSProof<E> {
     let c = transcript.challenge_scalar(b"");
     transcript.new_from_state(&c);
 
-    transcript.append(b"", &input);
+    transcript.append_scalar_vector(b"", &input);
 
     let timer_sc_proof_phase1 = Timer::new("prove_sc_phase_one");
 
@@ -272,12 +274,7 @@ impl<E: Pairing> R1CSProof<E> {
     poseidon: PoseidonConfig<E::ScalarField>,
   ) -> Result<(u128, u128, u128), ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
-    let mut bytes = Vec::new();
-    self
-      .t
-      .serialize_with_mode(&mut bytes, Compress::Yes)
-      .unwrap();
-    transcript.append(b"", &bytes);
+    transcript.append_gt::<E>(b"", &self.t);
 
     let c = transcript.challenge_scalar(b"");
 
@@ -373,12 +370,7 @@ impl<E: Pairing> R1CSProof<E> {
     poseidon: PoseidonConfig<E::ScalarField>,
   ) -> Result<usize, ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
-    let mut bytes = Vec::new();
-    self
-      .t
-      .serialize_with_mode(&mut bytes, Compress::Yes)
-      .unwrap();
-    transcript.append(b"", &bytes);
+    transcript.append_gt::<E>(b"", &self.t);
 
     let c: E::ScalarField = transcript.challenge_scalar(b"");
 

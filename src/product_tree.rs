@@ -5,6 +5,7 @@ use super::math::Math;
 use super::sumcheck::SumcheckInstanceProof;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::Transcript;
+use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::PrimeField;
 use ark_serialize::*;
 
@@ -118,7 +119,7 @@ pub struct LayerProof<F: PrimeField> {
 }
 
 #[allow(dead_code)]
-impl<F: PrimeField> LayerProof<F> {
+impl<F: PrimeField + Absorb> LayerProof<F> {
   pub fn verify(
     &self,
     claim: F,
@@ -142,7 +143,7 @@ pub struct LayerProofBatched<F: PrimeField> {
 }
 
 #[allow(dead_code)]
-impl<F: PrimeField> LayerProofBatched<F> {
+impl<F: PrimeField + Absorb> LayerProofBatched<F> {
   pub fn verify(
     &self,
     claim: F,
@@ -168,7 +169,7 @@ pub struct ProductCircuitEvalProofBatched<F: PrimeField> {
   claims_dotp: (Vec<F>, Vec<F>, Vec<F>),
 }
 
-impl<F: PrimeField> ProductCircuitEvalProof<F> {
+impl<F: PrimeField + Absorb> ProductCircuitEvalProof<F> {
   #![allow(dead_code)]
   pub fn prove(
     circuit: &mut ProductCircuit<F>,
@@ -199,8 +200,8 @@ impl<F: PrimeField> ProductCircuitEvalProof<F> {
         transcript,
       );
 
-      transcript.append(b"", &claims_prod[0]);
-      transcript.append(b"", &claims_prod[1]);
+      transcript.append_scalar(b"", &claims_prod[0]);
+      transcript.append_scalar(b"", &claims_prod[1]);
 
       // produce a random challenge
       let r_layer = transcript.challenge_scalar(b"");
@@ -229,8 +230,8 @@ impl<F: PrimeField> ProductCircuitEvalProof<F> {
       let (claim_last, rand_prod) = self.proof[i].verify(claim, num_rounds, 3, transcript);
 
       let claims_prod = &self.proof[i].claims;
-      transcript.append(b"", &claims_prod[0]);
-      transcript.append(b"", &claims_prod[1]);
+      transcript.append_scalar(b"", &claims_prod[0]);
+      transcript.append_scalar(b"", &claims_prod[1]);
 
       assert_eq!(rand.len(), rand_prod.len());
       let eq: F = (0..rand.len())
@@ -250,7 +251,7 @@ impl<F: PrimeField> ProductCircuitEvalProof<F> {
   }
 }
 
-impl<F: PrimeField> ProductCircuitEvalProofBatched<F> {
+impl<F: PrimeField + Absorb> ProductCircuitEvalProofBatched<F> {
   pub fn prove(
     prod_circuit_vec: &mut Vec<&mut ProductCircuit<F>>,
     dotp_circuit_vec: &mut Vec<&mut DotProductCircuit<F>>,
@@ -334,16 +335,16 @@ impl<F: PrimeField> ProductCircuitEvalProofBatched<F> {
 
       let (claims_prod_left, claims_prod_right, _claims_eq) = claims_prod;
       for i in 0..prod_circuit_vec.len() {
-        transcript.append(b"", &claims_prod_left[i]);
-        transcript.append(b"", &claims_prod_right[i]);
+        transcript.append_scalar(b"", &claims_prod_left[i]);
+        transcript.append_scalar(b"", &claims_prod_right[i]);
       }
 
       if layer_id == 0 && !dotp_circuit_vec.is_empty() {
         let (claims_dotp_left, claims_dotp_right, claims_dotp_weight) = claims_dotp;
         for i in 0..dotp_circuit_vec.len() {
-          transcript.append(b"", &claims_dotp_left[i]);
-          transcript.append(b"", &claims_dotp_right[i]);
-          transcript.append(b"", &claims_dotp_weight[i]);
+          transcript.append_scalar(b"", &claims_dotp_left[i]);
+          transcript.append_scalar(b"", &claims_dotp_right[i]);
+          transcript.append_scalar(b"", &claims_dotp_weight[i]);
         }
         claims_dotp_final = (claims_dotp_left, claims_dotp_right, claims_dotp_weight);
       }
@@ -410,8 +411,8 @@ impl<F: PrimeField> ProductCircuitEvalProofBatched<F> {
       assert_eq!(claims_prod_right.len(), claims_prod_vec.len());
 
       for i in 0..claims_prod_vec.len() {
-        transcript.append(b"", &claims_prod_left[i]);
-        transcript.append(b"", &claims_prod_right[i]);
+        transcript.append_scalar(b"", &claims_prod_left[i]);
+        transcript.append_scalar(b"", &claims_prod_right[i]);
       }
 
       assert_eq!(rand.len(), rand_prod.len());
@@ -427,9 +428,9 @@ impl<F: PrimeField> ProductCircuitEvalProofBatched<F> {
         let num_prod_instances = claims_prod_vec.len();
         let (claims_dotp_left, claims_dotp_right, claims_dotp_weight) = &self.claims_dotp;
         for i in 0..claims_dotp_left.len() {
-          transcript.append(b"", &claims_dotp_left[i]);
-          transcript.append(b"", &claims_dotp_right[i]);
-          transcript.append(b"", &claims_dotp_weight[i]);
+          transcript.append_scalar(b"", &claims_dotp_left[i]);
+          transcript.append_scalar(b"", &claims_dotp_right[i]);
+          transcript.append_scalar(b"", &claims_dotp_weight[i]);
 
           claim_expected += coeff_vec[i + num_prod_instances]
             * claims_dotp_left[i]

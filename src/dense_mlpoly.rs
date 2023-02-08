@@ -4,8 +4,8 @@ use super::commitments::{MultiCommitGens, PedersenCommit};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::nizk::{DotProductProofGens, DotProductProofLog};
-use crate::poseidon_transcript::PoseidonTranscript;
-use crate::transcript::{Transcript, TranscriptWriter};
+use crate::poseidon_transcript::{PoseidonTranscript, TranscriptWriter};
+use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{PrimeField, Zero};
@@ -462,10 +462,10 @@ impl<F: PrimeField> Index<usize> for DensePolynomial<F> {
   }
 }
 
-impl<G: CurveGroup> TranscriptWriter for PolyCommitment<G> {
-  fn write_to_transcript(&self, transcript: &mut impl Transcript) {
+impl<G: CurveGroup> TranscriptWriter<G::ScalarField> for PolyCommitment<G> {
+  fn write_to_transcript(&self, transcript: &mut PoseidonTranscript<G::ScalarField>) {
     for i in 0..self.C.len() {
-      transcript.append(b"", &self.C[i]);
+      transcript.append_point(b"", &self.C[i]);
     }
   }
 }
@@ -478,6 +478,7 @@ pub struct PolyEvalProof<E: Pairing> {
 impl<E> PolyEvalProof<E>
 where
   E: Pairing,
+  E::ScalarField: Absorb,
 {
   pub fn prove(
     poly: &DensePolynomial<E::ScalarField>,

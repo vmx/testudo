@@ -1,8 +1,9 @@
 use crate::transcript::Transcript;
 use ark_crypto_primitives::sponge::{
   poseidon::{PoseidonConfig, PoseidonSponge},
-  CryptographicSponge,
+  Absorb, CryptographicSponge,
 };
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
@@ -43,6 +44,76 @@ impl<F: PrimeField> PoseidonTranscript<F> {
 
   pub fn new_from_state(&mut self, challenge: &F) {
     self.sponge = PoseidonSponge::new(&self.params);
-    self.append(b"",challenge);
+    self.append(b"", challenge);
+  }
+  pub fn append_u64(&mut self, _label: &'static [u8], x: u64) {
+    self.sponge.absorb(&x);
+  }
+
+  pub fn append_bytes(&mut self, _label: &'static [u8], x: &Vec<u8>) {
+    self.sponge.absorb(x);
+  }
+
+  pub fn append_scalar<T: PrimeField + Absorb>(&mut self, _label: &'static [u8], scalar: &T) {
+    self.sponge.absorb(&scalar);
+  }
+
+  pub fn append_point<G>(&mut self, _label: &'static [u8], point: &G)
+  where
+    G: CurveGroup,
+  {
+    let mut point_encoding = Vec::new();
+    point
+      .serialize_with_mode(&mut point_encoding, Compress::Yes)
+      .unwrap();
+    self.sponge.absorb(&point_encoding);
+  }
+
+  pub fn append_scalar_vector<T: PrimeField + Absorb>(
+    &mut self,
+    _label: &'static [u8],
+    scalars: &[T],
+  ) {
+    for scalar in scalars.iter() {
+      self.append_scalar(b"", scalar);
+    }
+  }
+
+  pub fn append_gt<E>(&mut self, _label: &'static [u8], g_t: &E::TargetField)
+  where
+    E: Pairing,
+  {
+    let mut bytes = Vec::new();
+    g_t.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
+    self.append_bytes(b"", &bytes);
   }
 }
+
+pub trait TranscriptWriter<F: PrimeField> {
+  fn write_to_transcript(&self, transcript: &mut PoseidonTranscript<F>);
+}
+//pub trait AppendToPoseidon {
+//  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript);
+//}
+//
+//impl AppendToPoseidon for CompressedGroup {
+//  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
+//    transcript.append_point(self);
+//  }
+//}
+//
+//impl AppendToPoseidon for Commitment<I> {
+//  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
+//    let mut bytes = Vec::new();
+//    self.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
+//    transcript.append_bytes(&bytes);
+//  }
+//}
+//
+//impl AppendToPoseidon for G1Affine {
+//  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
+//    let mut bytes = Vec::new();
+//    self.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
+//    transcript.append_bytes(&bytes);
+//}
+//

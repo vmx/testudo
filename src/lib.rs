@@ -42,6 +42,7 @@ mod constraints;
 pub mod poseidon_transcript;
 
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
+use ark_crypto_primitives::sponge::Absorb;
 use ark_serialize::*;
 use core::cmp::max;
 use errors::{ProofVerifyError, R1CSError};
@@ -334,8 +335,11 @@ pub struct SNARK<E: Pairing> {
   ry: Vec<E::ScalarField>,
 }
 
-impl<E: Pairing> SNARK<E> {
-
+impl<E> SNARK<E>
+where
+  E: Pairing,
+  E::ScalarField: Absorb,
+{
   /// A public computation to create a commitment to an R1CS instance
   pub fn encode(
     inst: &Instance<E::ScalarField>,
@@ -411,9 +415,9 @@ impl<E: Pairing> SNARK<E> {
     let timer_eval = Timer::new("eval_sparse_polys");
     let inst_evals = {
       let (Ar, Br, Cr) = inst.inst.evaluate(&rx, &ry);
-      transcript.append(b"", &Ar);
-      transcript.append(b"", &Br);
-      transcript.append(b"", &Cr);
+      transcript.append_scalar(b"", &Ar);
+      transcript.append_scalar(b"", &Br);
+      transcript.append_scalar(b"", &Cr);
       (Ar, Br, Cr)
     };
     timer_eval.stop();
@@ -483,9 +487,9 @@ impl<E: Pairing> SNARK<E> {
     // transcript.new_from_state(&self.r1cs_sat_proof.transcript_sat_state);
 
     let (Ar, Br, Cr) = &self.inst_evals;
-    transcript.append(b"", Ar);
-    transcript.append(b"", Br);
-    transcript.append(b"", Cr);
+    transcript.append_scalar(b"", Ar);
+    transcript.append_scalar(b"", Br);
+    transcript.append_scalar(b"", Cr);
 
     self.r1cs_eval_proof.verify(
       &comm.comm,
@@ -530,8 +534,11 @@ pub struct NIZK<E: Pairing> {
   r: (Vec<E::ScalarField>, Vec<E::ScalarField>),
 }
 
-impl<E: Pairing> NIZK<E> {
-
+impl<E> NIZK<E>
+where
+  E: Pairing,
+  E::ScalarField: Absorb,
+{
   /// A method to produce a NIZK proof of the satisfiability of an R1CS instance
   pub fn prove(
     inst: &Instance<E::ScalarField>,
@@ -542,7 +549,7 @@ impl<E: Pairing> NIZK<E> {
   ) -> Self {
     let timer_prove = Timer::new("NIZK::prove");
     // transcript.append_protocol_name(NIZK::protocol_name());
-    transcript.append(b"", &inst.digest);
+    transcript.append_bytes(b"", &inst.digest);
 
     let (r1cs_sat_proof, rx, ry) = {
       // we might need to pad variables
@@ -589,7 +596,7 @@ impl<E: Pairing> NIZK<E> {
   ) -> Result<usize, ProofVerifyError> {
     let timer_verify = Timer::new("NIZK::verify");
 
-    transcript.append(b"", &inst.digest);
+    transcript.append_bytes(b"", &inst.digest);
 
     // We send evaluations of A, B, C at r = (rx, ry) as claims
     // to enable the verifier complete the first sum-check
@@ -632,7 +639,7 @@ impl<E: Pairing> NIZK<E> {
     let timer_verify = Timer::new("NIZK::verify");
 
     // transcript.append_protocol_name(NIZK::protocol_name());
-    transcript.append(b"", &inst.digest);
+    transcript.append_bytes(b"", &inst.digest);
 
     // We send evaluations of A, B, C at r = (rx, ry) as claims
     // to enable the verifier complete the first sum-check

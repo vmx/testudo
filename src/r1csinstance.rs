@@ -6,8 +6,9 @@ use super::sparse_mlpoly::{
   SparseMatPolyCommitmentGens, SparseMatPolyEvalProof, SparseMatPolynomial,
 };
 use super::timer::Timer;
-use crate::poseidon_transcript::PoseidonTranscript;
-use crate::transcript::{Transcript, TranscriptWriter};
+use crate::poseidon_transcript::{PoseidonTranscript, TranscriptWriter};
+use crate::transcript::Transcript;
+use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
@@ -54,11 +55,11 @@ pub struct R1CSCommitment<G: CurveGroup> {
   comm: SparseMatPolyCommitment<G>,
 }
 
-impl<G: CurveGroup> TranscriptWriter for R1CSCommitment<G> {
-  fn write_to_transcript(&self, transcript: &mut impl Transcript) {
-    transcript.append(b"", &(self.num_cons as u64));
-    transcript.append(b"", &(self.num_vars as u64));
-    transcript.append(b"", &(self.num_inputs as u64));
+impl<G: CurveGroup> TranscriptWriter<G::ScalarField> for R1CSCommitment<G> {
+  fn write_to_transcript(&self, transcript: &mut PoseidonTranscript<G::ScalarField>) {
+    transcript.append_u64(b"", self.num_cons as u64);
+    transcript.append_u64(b"", self.num_vars as u64);
+    transcript.append_u64(b"", self.num_inputs as u64);
     self.comm.write_to_transcript(transcript);
   }
 }
@@ -327,7 +328,11 @@ pub struct R1CSEvalProof<E: Pairing> {
   proof: SparseMatPolyEvalProof<E>,
 }
 
-impl<E: Pairing> R1CSEvalProof<E> {
+impl<E> R1CSEvalProof<E>
+where
+  E: Pairing,
+  E::ScalarField: Absorb,
+{
   pub fn prove(
     decomm: &R1CSDecommitment<E::ScalarField>,
     rx: &[E::ScalarField], // point at which the polynomial is evaluated

@@ -2,11 +2,11 @@
 #![allow(clippy::type_complexity)]
 use super::dense_mlpoly::DensePolynomial;
 use super::errors::ProofVerifyError;
-use crate::poseidon_transcript::PoseidonTranscript;
+use crate::poseidon_transcript::{PoseidonTranscript, TranscriptWriter};
 use crate::transcript::Transcript;
-use crate::transcript::TranscriptWriter;
 
 use super::unipoly::UniPoly;
+use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::PrimeField;
 
 use ark_serialize::*;
@@ -18,7 +18,7 @@ pub struct SumcheckInstanceProof<F: PrimeField> {
   pub polys: Vec<UniPoly<F>>,
 }
 
-impl<F: PrimeField> SumcheckInstanceProof<F> {
+impl<F: PrimeField + Absorb> SumcheckInstanceProof<F> {
   pub fn new(polys: Vec<UniPoly<F>>) -> Self {
     SumcheckInstanceProof { polys }
   }
@@ -60,7 +60,7 @@ impl<F: PrimeField> SumcheckInstanceProof<F> {
   }
 }
 
-impl<F: PrimeField> SumcheckInstanceProof<F> {
+impl<F: PrimeField + Absorb> SumcheckInstanceProof<F> {
   pub fn prove_cubic_with_additive_term<C>(
     claim: &F,
     num_rounds: usize,
