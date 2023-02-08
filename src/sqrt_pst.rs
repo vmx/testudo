@@ -24,9 +24,9 @@ pub struct Polynomial {
 impl Polynomial {
   // Given the evaluations over the boolean hypercube of a polynomial p of size
   // 2*m compute the sqrt-sized polynomials p_i as
-  // p_i(Y) = \sum_{j \in \{0,1\}^m} p(j, i) * chi_j(Y)
-  // where p(X,Y) = \sum_{i \in \{0,\1}^m} chi_i(X) * p_i(Y)
-  //
+  // p_i(X) = \sum_{j \in \{0,1\}^m} p(j, i) * chi_j(X)
+  // where p(X,Y) = \sum_{i \in \{0,\1}^m}
+  //  (\sum_{j \in \{0, 1\}^{m}} p(j, i) * \chi_j(X)) * \chi_i(Y)
   // TODO: add case when the length of the list is not an even power of 2
   pub fn from_evaluations(Z: &[Scalar]) -> Self {
     let pl_timer = Timer::new("poly_list_build");
@@ -40,7 +40,7 @@ impl Polynomial {
         let z: Vec<Scalar> = (0..pow_m)
           .into_par_iter()
           // viewing the list of evaluation as a square matrix
-          // we select by row i and column j
+          // we select by row j and column i
           .map(|j| Z[(j << m) | i])
           .collect();
         DensePolynomial::new(z)
@@ -57,9 +57,10 @@ impl Polynomial {
   }
 
   // Given point = (\vec{a}, \vec{b}), compute the polynomial q as
-  // q(Y) =
-  // \sum_{j \in \{0,1\}^m}(\sum_{i \in \{0,1\}^m} p(j,i) * chi_i(b)) * chi_j(Y)
-  // and p(a,b) = q(b) where p is the initial polynomial
+  // q(X) =
+  // \sum_{j \in \{0,1\}^m}chi_j(X) *
+  //  (\sum_{i \in \{0,1\}^m} p(j,i) * chi_i(\vec{b}))
+  // and p(\vec{a},\vec{b}) = q(\vec{b}) where p is the initial polynomial
   fn get_q(&mut self, point: &[Scalar]) {
     let q_timer = Timer::new("build_q");
     debug_assert!(point.len() == 2 * self.m);
@@ -83,7 +84,7 @@ impl Polynomial {
   }
 
   // Given point = (\vec{a}, \vec{b}) used to construct q
-  // compute q(b) = p(a,b).
+  // compute q(a) = p(a,b).
   pub fn eval(&mut self, point: &[Scalar]) -> Scalar {
     let a = &point[0..point.len() / 2];
     let _b = &point[point.len() / 2..point.len()];
@@ -140,7 +141,8 @@ impl Polynomial {
     let mut prod = Scalar::one();
     for j in 0..m {
       let b_j = b[j];
-      // iterate from msb to lsb of i to build chi_i as defined above
+      // iterate from first (msb) to last (lsb) bit of i
+      // to build chi_i using the formula above
       if i >> (m - j - 1) & 1 == 1 {
         prod = prod * b_j;
       } else {
@@ -169,8 +171,8 @@ impl Polynomial {
     let timer_open = Timer::new("sqrt_open");
 
     // Compute the PST commitment to q obtained as the inner products of the
-    // commitments to the polynomials p_i and chi_i(a) for i ranging over the
-    // boolean hypercube of size m.
+    // commitments to the polynomials p_i and chi_i(\vec{b}) for i ranging over
+    // the boolean hypercube of size m.
     let _m = a.len();
     let timer_msm = Timer::new("msm");
     if self.chis_b.is_none() {
@@ -180,7 +182,7 @@ impl Polynomial {
     let chis = self.chis_b.clone().unwrap();
     assert!(chis.len() == comm_list.len());
 
-    let a_vec: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
+    let comms: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
 
     let c_u =
       <G1 as VariableBaseMSM>::msm_unchecked(a_vec.as_slice(), chis.as_slice()).into_affine();
@@ -200,7 +202,7 @@ impl Polynomial {
     let mipp_proof = MippProof::<I>::prove::<PoseidonTranscript>(
       transcript,
       ck,
-      a_vec,
+      comms,
       chis.to_vec(),
       h_vec,
       &c_u,
@@ -210,6 +212,10 @@ impl Polynomial {
     timer_mipp_proof.stop();
 
     let timer_proof = Timer::new("pst_open");
+
+    // reversing a is necessary because the sumcheck code in spartan generates
+    // the point in reverse order compared to how the polynomial commitment
+    // expects
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
 
@@ -248,11 +254,14 @@ impl Polynomial {
     assert!(res_mipp == true);
     timer_mipp_verify.stop();
 
+    // reversing a is necessary because the sumcheck code in spartan generates
+    // the point in reverse order compared to how the polynomial commitment
+    // expects
     let mut a_rev = a.to_vec().clone();
     a_rev.reverse();
-    let timer_pst_verify = Timer::new("pst_verify");
 
-    // verify that q(a) is indeed v
+    let timer_pst_verify = Timer::new("pst_verify");
+    // PST proof that q(a) is indeed equal to value claimed by the prover
     let res = MultilinearPC::<I>::check(vk, U, &a_rev, v, pst_proof);
     timer_pst_verify.stop();
     res
