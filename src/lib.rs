@@ -777,14 +777,18 @@ mod tests {
 
     // Create a^2 + b + 13
     A.push((0, num_vars + 2, (Scalar::one().into_bigint().to_bytes_le()))); // 1*a
-    B.push((0, num_vars + 2, Scalar::one().into_bigint().to_bytes_le()));// 1*a
+    B.push((0, num_vars + 2, Scalar::one().into_bigint().to_bytes_le())); // 1*a
     C.push((0, num_vars + 1, Scalar::one().into_bigint().to_bytes_le())); // 1*z
     C.push((
       0,
       num_vars,
       (-Scalar::from(13u64)).into_bigint().to_bytes_le(),
     )); // -13*1
-    C.push((0, num_vars + 3, (-Scalar::one()).into_bigint().to_bytes_le())); // -1*b
+    C.push((
+      0,
+      num_vars + 3,
+      (-Scalar::one()).into_bigint().to_bytes_le(),
+    )); // -1*b
 
     // Var Assignments (Z_0 = 16 is the only output)
     let vars = vec![Scalar::zero().into_bigint().to_bytes_le(); num_vars];
