@@ -5,7 +5,6 @@ use super::errors::ProofVerifyError;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::TranscriptWriter;
 
-use super::scalar::Scalar;
 use super::unipoly::UniPoly;
 
 use ark_ff::PrimeField;

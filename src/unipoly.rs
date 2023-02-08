@@ -1,5 +1,3 @@
-use super::scalar::Scalar;
-use crate::poseidon_transcript::PoseidonTranscript;
 use crate::transcript::{Transcript, TranscriptWriter};
 use ark_ff::{Field, PrimeField};
 use ark_serialize::*;
@@ -104,7 +102,7 @@ impl<F: PrimeField> TranscriptWriter for UniPoly<F> {
   fn write_to_transcript(&self, transcript: &mut impl Transcript) {
     // transcript.append_message(label, b"UniPoly_begin");
     for i in 0..self.coeffs.len() {
-      transcript.append(&self.coeffs[i],"coeffs");
+      transcript.append(&self.coeffs[i], "coeffs");
     }
     // transcript.append_message(label, b"UniPoly_end");
   }
@@ -117,21 +115,23 @@ mod tests {
 
   use super::*;
 
+  type F = ark_bls12_377::Fr;
+
   #[test]
-  fn test_from_evals_quad() {
+  fn test_from_evals_quad<F: PrimeField>() {
     // polynomial is 2x^2 + 3x + 1
-    let e0 = Scalar::one();
-    let e1 = Scalar::from(6);
-    let e2 = Scalar::from(15);
+    let e0 = F::one();
+    let e1 = F::from(6);
+    let e2 = F::from(15);
     let evals = vec![e0, e1, e2];
     let poly = UniPoly::from_evals(&evals);
 
     assert_eq!(poly.eval_at_zero(), e0);
     assert_eq!(poly.eval_at_one(), e1);
     assert_eq!(poly.coeffs.len(), 3);
-    assert_eq!(poly.coeffs[0], Scalar::one());
-    assert_eq!(poly.coeffs[1], Scalar::from(3));
-    assert_eq!(poly.coeffs[2], Scalar::from(2));
+    assert_eq!(poly.coeffs[0], F::one());
+    assert_eq!(poly.coeffs[1], F::from(3));
+    assert_eq!(poly.coeffs[2], F::from(2));
 
     let hint = e0 + e1;
     let compressed_poly = poly.compress();
@@ -140,27 +140,27 @@ mod tests {
       assert_eq!(decompressed_poly.coeffs[i], poly.coeffs[i]);
     }
 
-    let e3 = Scalar::from(28);
-    assert_eq!(poly.evaluate(&Scalar::from(3)), e3);
+    let e3 = F::from(28);
+    assert_eq!(poly.evaluate(&F::from(3)), e3);
   }
 
   #[test]
   fn test_from_evals_cubic() {
     // polynomial is x^3 + 2x^2 + 3x + 1
-    let e0 = Scalar::one();
-    let e1 = Scalar::from(7);
-    let e2 = Scalar::from(23);
-    let e3 = Scalar::from(55);
+    let e0 = F::one();
+    let e1 = F::from(7);
+    let e2 = F::from(23);
+    let e3 = F::from(55);
     let evals = vec![e0, e1, e2, e3];
     let poly = UniPoly::from_evals(&evals);
 
     assert_eq!(poly.eval_at_zero(), e0);
     assert_eq!(poly.eval_at_one(), e1);
     assert_eq!(poly.coeffs.len(), 4);
-    assert_eq!(poly.coeffs[0], Scalar::one());
-    assert_eq!(poly.coeffs[1], Scalar::from(3));
-    assert_eq!(poly.coeffs[2], Scalar::from(2));
-    assert_eq!(poly.coeffs[3], Scalar::from(1));
+    assert_eq!(poly.coeffs[0], F::one());
+    assert_eq!(poly.coeffs[1], F::from(3));
+    assert_eq!(poly.coeffs[2], F::from(2));
+    assert_eq!(poly.coeffs[3], F::from(1));
 
     let hint = e0 + e1;
     let compressed_poly = poly.compress();
@@ -169,7 +169,7 @@ mod tests {
       assert_eq!(decompressed_poly.coeffs[i], poly.coeffs[i]);
     }
 
-    let e4 = Scalar::from(109);
-    assert_eq!(poly.evaluate(&Scalar::from(4)), e4);
+    let e4 = F::from(109);
+    assert_eq!(poly.evaluate(&F::from(4)), e4);
   }
 }

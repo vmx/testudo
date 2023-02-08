@@ -10,7 +10,6 @@ use rayon::prelude::{
   IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
-use super::scalar::Scalar;
 use crate::{
   dense_mlpoly::DensePolynomial, math::Math, poseidon_transcript::PoseidonTranscript, timer::Timer,
 };
@@ -183,8 +182,7 @@ impl<E: Pairing> Polynomial<E> {
 
     let a_vec: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
 
-    let c_u =
-      <E::G1 as VariableBaseMSM>::msm_unchecked(a_vec.as_slice(), chis.as_slice()).into_affine();
+    let c_u = <E::G1 as VariableBaseMSM>::msm_unchecked(&a_vec, &chis).into_affine();
     timer_msm.stop();
 
     let U: Commitment<E> = Commitment {
@@ -198,16 +196,8 @@ impl<E: Pairing> Polynomial<E> {
     // construct MIPP proof that U is the inner product of the vector A
     // and the vector y, where A is the opening vector to T
     let timer_mipp_proof = Timer::new("mipp_prove");
-    let mipp_proof = MippProof::<E>::prove(
-      transcript,
-      ck,
-      a_vec,
-      chis.to_vec(),
-      h_vec,
-      &c_u,
-      t,
-    )
-    .unwrap();
+    let mipp_proof =
+      MippProof::<E>::prove(transcript, ck, a_vec, chis.to_vec(), h_vec, &c_u, t).unwrap();
     timer_mipp_proof.stop();
 
     let timer_proof = Timer::new("pst_open");
@@ -238,14 +228,7 @@ impl<E: Pairing> Polynomial<E> {
 
     let timer_mipp_verify = Timer::new("mipp_verify");
     // verify that U = A^y where A is the opening vector of T
-    let res_mipp = MippProof::<E>::verify(
-      vk,
-      transcript,
-      mipp_proof,
-      b.to_vec(),
-      &U.g_product,
-      T,
-    );
+    let res_mipp = MippProof::<E>::verify(vk, transcript, mipp_proof, b.to_vec(), &U.g_product, T);
     assert!(res_mipp == true);
     timer_mipp_verify.stop();
 
@@ -266,6 +249,8 @@ mod tests {
   use crate::parameters::poseidon_params;
 
   use super::*;
+  type F = ark_bls12_377::Fr;
+  type E = ark_bls12_377::Bls12_377;
 
   use ark_std::UniformRand;
   #[test]
@@ -273,13 +258,13 @@ mod tests {
     let mut rng = ark_std::test_rng();
     let num_vars = 8;
     let len = 2_usize.pow(num_vars);
-    let Z: Vec<Scalar> = (0..len)
+    let Z: Vec<F> = (0..len)
       .into_iter()
-      .map(|_| Scalar::rand(&mut rng))
+      .map(|_| F::rand(&mut rng))
       .collect();
-    let r: Vec<Scalar> = (0..num_vars)
+    let r: Vec<F> = (0..num_vars)
       .into_iter()
-      .map(|_| Scalar::rand(&mut rng))
+      .map(|_| F::rand(&mut rng))
       .collect();
 
     let p = DensePolynomial::new(Z.clone());
@@ -296,17 +281,17 @@ mod tests {
     let mut rng = ark_std::test_rng();
     let num_vars = 4;
     let len = 2_usize.pow(num_vars);
-    let Z: Vec<Scalar> = (0..len)
+    let Z: Vec<F> = (0..len)
       .into_iter()
-      .map(|_| Scalar::rand(&mut rng))
+      .map(|_| F::rand(&mut rng))
       .collect();
-    let r: Vec<Scalar> = (0..num_vars)
+    let r: Vec<F> = (0..num_vars)
       .into_iter()
-      .map(|_| Scalar::rand(&mut rng))
+      .map(|_| F::rand(&mut rng))
       .collect();
 
-    let gens = MultilinearPC::<I>::setup(2, &mut rng);
-    let (ck, vk) = MultilinearPC::<I>::trim(&gens, 2);
+    let gens = MultilinearPC::<E>::setup(2, &mut rng);
+    let (ck, vk) = MultilinearPC::<E>::trim(&gens, 2);
 
     let mut pl = Polynomial::from_evaluations(&Z.clone());
 
