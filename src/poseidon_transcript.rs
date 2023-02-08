@@ -41,11 +41,16 @@ impl<F: PrimeField> PoseidonTranscript<F> {
       params: params.clone(),
     }
   }
+}
 
+impl<F: PrimeField + Absorb> PoseidonTranscript<F> {
   pub fn new_from_state(&mut self, challenge: &F) {
     self.sponge = PoseidonSponge::new(&self.params);
-    self.append(b"", challenge);
+    self.append_scalar(b"", challenge);
   }
+}
+
+impl<F: PrimeField> PoseidonTranscript<F> {
   pub fn append_u64(&mut self, _label: &'static [u8], x: u64) {
     self.sponge.absorb(&x);
   }
