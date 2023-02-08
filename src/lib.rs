@@ -49,7 +49,6 @@ use core::cmp::max;
 use errors::{ProofVerifyError, R1CSError};
 
 use poseidon_transcript::{PoseidonTranscript};
-use transcript::TranscriptWriter;
 use r1csinstance::{
   R1CSCommitment, R1CSCommitmentGens, R1CSDecommitment, R1CSEvalProof, R1CSInstance,
 };

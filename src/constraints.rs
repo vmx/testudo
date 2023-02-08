@@ -1,5 +1,5 @@
 use ark_ec::pairing::Pairing;
-use std::{borrow::Borrow};
+use std::borrow::Borrow;
 
 use crate::{
   math::Math,
@@ -42,10 +42,7 @@ where
       sponge.absorb(&c_var).unwrap();
     }
 
-    Self {
-      cs,
-      sponge,
-    }
+    Self { cs, sponge }
   }
 
   fn append(&mut self, input: &FpVar<F>) -> Result<(), SynthesisError> {
@@ -83,7 +80,7 @@ impl<F: PrimeField> AllocVar<UniPoly<F>, F> for UniPolyVar<F> {
   ) -> Result<Self, SynthesisError> {
     f().and_then(|c| {
       let cs = cs.into();
-      let cp: &UniPoly = c.borrow();
+      let cp: &UniPoly<F> = c.borrow();
       let mut coeffs_var = Vec::new();
       for coeff in cp.coeffs.iter() {
         let coeff_var = FpVar::<F>::new_variable(cs.clone(), || Ok(coeff), mode)?;
@@ -163,7 +160,7 @@ impl<F: PrimeField> AllocVar<SparsePolyEntry<F>, F> for SparsePolyEntryVar<F> {
   ) -> Result<Self, SynthesisError> {
     f().and_then(|s| {
       let cs = cs.into();
-      let spe: &SparsePolyEntry = s.borrow();
+      let spe: &SparsePolyEntry<F> = s.borrow();
       let val_var = FpVar::<F>::new_witness(cs, || Ok(spe.val))?;
       Ok(Self {
         idx: spe.idx,
@@ -187,7 +184,7 @@ impl<F: PrimeField> AllocVar<SparsePolynomial<F>, F> for SparsePolynomialVar<F> 
   ) -> Result<Self, SynthesisError> {
     f().and_then(|s| {
       let cs = cs.into();
-      let sp: &SparsePolynomial = s.borrow();
+      let sp: &SparsePolynomial<F> = s.borrow();
       let mut Z_var = Vec::new();
       for spe in sp.Z.iter() {
         let spe_var = SparsePolyEntryVar::new_variable(cs.clone(), || Ok(spe), mode)?;
@@ -245,7 +242,7 @@ pub struct R1CSVerificationCircuit<F: PrimeField> {
 }
 
 impl<F: PrimeField> R1CSVerificationCircuit<F> {
-  pub fn new(config: &VerifierConfig<F>) -> Self {
+  pub fn new<E: Pairing<ScalarField = F>>(config: &VerifierConfig<E>) -> Self {
     Self {
       num_vars: config.num_vars,
       num_cons: config.num_cons,
@@ -269,7 +266,7 @@ impl<F: PrimeField> R1CSVerificationCircuit<F> {
 }
 
 /// This section implements the sumcheck verification part of Spartan
-impl<F> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
+impl<F: PrimeField> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
   fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> ark_relations::r1cs::Result<()> {
     let mut transcript_var =
       PoseidonTranscripVar::new(cs.clone(), &self.params, Some(self.prev_challenge));
@@ -402,7 +399,12 @@ pub struct VerifierConfig<E: Pairing> {
   pub evals: (E::ScalarField, E::ScalarField, E::ScalarField),
   pub params: PoseidonConfig<E::ScalarField>,
   pub prev_challenge: E::ScalarField,
-  pub claims_phase2: (E::ScalarField, E::ScalarField, E::ScalarField, E::ScalarField),
+  pub claims_phase2: (
+    E::ScalarField,
+    E::ScalarField,
+    E::ScalarField,
+    E::ScalarField,
+  ),
   pub eval_vars_at_ry: E::ScalarField,
   pub polys_sc1: Vec<UniPoly<E::ScalarField>>,
   pub polys_sc2: Vec<UniPoly<E::ScalarField>>,

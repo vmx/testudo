@@ -331,7 +331,7 @@ pub struct R1CSEvalProof<E: Pairing> {
 
 impl<E: Pairing> R1CSEvalProof<E> {
   pub fn prove(
-    decomm: &R1CSDecommitment<E>,
+    decomm: &R1CSDecommitment<E::ScalarField>,
     rx: &[E::ScalarField], // point at which the polynomial is evaluated
     ry: &[E::ScalarField],
     evals: &(E::ScalarField, E::ScalarField, E::ScalarField),

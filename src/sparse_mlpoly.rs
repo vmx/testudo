@@ -49,10 +49,10 @@ pub struct DerefsCommitment<G: CurveGroup> {
   comm_ops_val: PolyCommitment<G>,
 }
 
-impl<G: CurveGroup> Derefs<G> {
+impl<F: PrimeField> Derefs<F> {
   pub fn new(
-    row_ops_val: Vec<DensePolynomial<G::ScalarField>>,
-    col_ops_val: Vec<DensePolynomial<G::ScalarField>>,
+    row_ops_val: Vec<DensePolynomial<F>>,
+    col_ops_val: Vec<DensePolynomial<F>>,
   ) -> Self {
     assert_eq!(row_ops_val.len(), col_ops_val.len());
 
@@ -70,7 +70,7 @@ impl<G: CurveGroup> Derefs<G> {
     derefs
   }
 
-  pub fn commit(&self, gens: &PolyCommitmentGens<G>) -> DerefsCommitment<G> {
+  pub fn commit<E>(&self, gens: &PolyCommitmentGens<E>) -> DerefsCommitment<E::G1> where E: Pairing<ScalarField = F>{
     let (comm_ops_val, _blinds) = self.comb.commit(gens);
     DerefsCommitment { comm_ops_val }
   }
@@ -90,7 +90,7 @@ impl<E: Pairing> DerefsEvalProof<E> {
     joint_poly: &DensePolynomial<E::ScalarField>,
     r: &[E::ScalarField],
     evals: Vec<E::ScalarField>,
-    gens: &PolyCommitmentGens<E::G1>,
+    gens: &PolyCommitmentGens<E>,
     transcript: &mut PoseidonTranscript<E::ScalarField>,
   ) -> PolyEvalProof<E> {
     assert_eq!(joint_poly.get_num_vars(), r.len() + evals.len().log_2());
@@ -135,7 +135,7 @@ impl<E: Pairing> DerefsEvalProof<E> {
     eval_row_ops_val_vec: &[E::ScalarField],
     eval_col_ops_val_vec: &[E::ScalarField],
     r: &[E::ScalarField],
-    gens: &PolyCommitmentGens<E::G1>,
+    gens: &PolyCommitmentGens<E>,
     transcript: &mut PoseidonTranscript<E::ScalarField>,
   ) -> Self {
     // transcript.append_protocol_name(DerefsEvalProof::protocol_name());
@@ -187,7 +187,7 @@ impl<E: Pairing> DerefsEvalProof<E> {
     r: &[E::ScalarField],
     eval_row_ops_val_vec: &[E::ScalarField],
     eval_col_ops_val_vec: &[E::ScalarField],
-    gens: &PolyCommitmentGens<E::G1>,
+    gens: &PolyCommitmentGens<E>,
     comm: &DerefsCommitment<E::G1>,
     transcript: &mut PoseidonTranscript<E::ScalarField>,
   ) -> Result<(), ProofVerifyError> {
@@ -896,7 +896,7 @@ impl<E: Pairing> HashLayerProof<E> {
     ),
     claims_dotp: &[E::ScalarField],
     comm: &SparseMatPolyCommitment<E::G1>,
-    gens: &SparseMatPolyCommitmentGens<E::G1>,
+    gens: &SparseMatPolyCommitmentGens<E>,
     comm_derefs: &DerefsCommitment<E::G1>,
     rx: &[E::ScalarField],
     ry: &[E::ScalarField],
@@ -1340,7 +1340,7 @@ impl<E: Pairing> PolyEvalNetworkProof<E> {
     dense: &MultiSparseMatPolynomialAsDense<E::ScalarField>,
     derefs: &Derefs<E::ScalarField>,
     evals: &[E::ScalarField],
-    gens: &SparseMatPolyCommitmentGens<E::G1>,
+    gens: &SparseMatPolyCommitmentGens<E>,
     transcript: &mut PoseidonTranscript<E::ScalarField>,
   ) -> Self {
     // transcript.append_protocol_name(PolyEvalNetworkProof::protocol_name());
@@ -1369,7 +1369,7 @@ impl<E: Pairing> PolyEvalNetworkProof<E> {
     comm: &SparseMatPolyCommitment<E::G1>,
     comm_derefs: &DerefsCommitment<E::G1>,
     evals: &[E::ScalarField],
-    gens: &SparseMatPolyCommitmentGens<E::G1>,
+    gens: &SparseMatPolyCommitmentGens<E>,
     rx: &[E::ScalarField],
     ry: &[E::ScalarField],
     r_mem_check: &(E::ScalarField, E::ScalarField),

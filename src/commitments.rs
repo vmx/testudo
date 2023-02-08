@@ -1,7 +1,5 @@
 use crate::parameters::*;
 use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM};
-use ark_ff::PrimeField;
-use std::ops::Mul;
 
 use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
 use ark_crypto_primitives::sponge::CryptographicSponge;
@@ -73,19 +71,5 @@ impl<G: CurveGroup> Commitments<G> for G::ScalarField {
   fn commit(&self, blind: &G::ScalarField, gens_n: &MultiCommitGens<G>) -> G {
     assert_eq!(gens_n.n, 1);
     <G as VariableBaseMSM>::msm(&[*self, *blind], &[gens_n.G[0], gens_n.h])
-  }
-}
-
-impl<G: CurveGroup> Commitments<G> for Vec<G::ScalarField> {
-  fn commit(&self, blind: &G::ScalarField, gens_n: &MultiCommitGens<G>) -> G {
-    assert_eq!(gens_n.n, self.len());
-    <G as VariableBaseMSM>::msm(self, &gens_n.G) + gens_n.h.mul(blind)
-  }
-}
-
-impl<G: CurveGroup> Commitments<G> for [G::ScalarField] {
-  fn commit(&self, blind: &G::ScalarField, gens_n: &MultiCommitGens<G>) -> G {
-    assert_eq!(gens_n.n, self.len());
-    <G as VariableBaseMSM>::msm(self, &gens_n.G) + gens_n.h.mul(blind)
   }
 }

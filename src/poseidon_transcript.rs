@@ -8,7 +8,7 @@ use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
 #[derive(Clone)]
 /// TODO
-pub struct PoseidonTranscript<F> {
+pub struct PoseidonTranscript<F: PrimeField> {
   sponge: PoseidonSponge<F>,
   params: PoseidonConfig<F>,
 }
