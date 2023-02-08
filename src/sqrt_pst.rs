@@ -1,22 +1,17 @@
 use crate::mipp::MippProof;
 use ark_bls12_377::{Bls12_377 as I, G1Projective as G1};
 use ark_ec::{pairing::Pairing, scalar_mul::variable_base::VariableBaseMSM, CurveGroup};
-use ark_ff::{One};
+use ark_ff::One;
 use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
 };
 
-use rayon::prelude::{
-  IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
-};
+use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use super::scalar::Scalar;
 use crate::{
-  dense_mlpoly::DensePolynomial,
-  math::Math,
-  poseidon_transcript::{PoseidonTranscript},
-  timer::Timer,
+  dense_mlpoly::DensePolynomial, math::Math, poseidon_transcript::PoseidonTranscript, timer::Timer,
 };
 
 pub struct Polynomial {
@@ -266,12 +261,11 @@ impl Polynomial {
 
 #[cfg(test)]
 mod tests {
-  
 
   use crate::parameters::poseidon_params;
 
   use super::*;
-  
+
   use ark_std::UniformRand;
   #[test]
   fn check_sqrt_poly_eval() {

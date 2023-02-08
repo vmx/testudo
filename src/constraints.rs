@@ -23,7 +23,7 @@ use ark_crypto_primitives::sponge::{
   constraints::CryptographicSpongeVar,
   poseidon::{constraints::PoseidonSpongeVar, PoseidonConfig},
 };
-use ark_poly_commit::multilinear_pc::data_structures::{Commitment};
+use ark_poly_commit::multilinear_pc::data_structures::Commitment;
 use ark_r1cs_std::{
   alloc::{AllocVar, AllocationMode},
   fields::fp::FpVar,
@@ -252,7 +252,7 @@ pub struct R1CSVerificationCircuit {
 }
 
 impl R1CSVerificationCircuit {
-  fn new(config: &VerifierConfig) -> Self {
+  pub fn new(config: &VerifierConfig) -> Self {
     Self {
       num_vars: config.num_vars,
       num_cons: config.num_cons,
@@ -322,10 +322,10 @@ impl ConstraintSynthesizer<Fr> for R1CSVerificationCircuit {
 
     let (Az_claim, Bz_claim, Cz_claim, prod_Az_Bz_claims) = &self.claims_phase2;
 
-    let Az_claim_var = FpVar::<Fr>::new_input(cs.clone(), || Ok(Az_claim))?;
-    let Bz_claim_var = FpVar::<Fr>::new_input(cs.clone(), || Ok(Bz_claim))?;
-    let Cz_claim_var = FpVar::<Fr>::new_input(cs.clone(), || Ok(Cz_claim))?;
-    let prod_Az_Bz_claim_var = FpVar::<Fr>::new_input(cs.clone(), || Ok(prod_Az_Bz_claims))?;
+    let Az_claim_var = FpVar::<Fr>::new_witness(cs.clone(), || Ok(Az_claim))?;
+    let Bz_claim_var = FpVar::<Fr>::new_witness(cs.clone(), || Ok(Bz_claim))?;
+    let Cz_claim_var = FpVar::<Fr>::new_witness(cs.clone(), || Ok(Cz_claim))?;
+    let prod_Az_Bz_claim_var = FpVar::<Fr>::new_witness(cs.clone(), || Ok(prod_Az_Bz_claims))?;
     let one = FpVar::<Fr>::one();
     let prod_vars: Vec<FpVar<Fr>> = (0..rx_var.len())
       .map(|i| (&rx_var[i] * &tau_vars[i]) + (&one - &rx_var[i]) * (&one - &tau_vars[i]))
@@ -415,59 +415,61 @@ pub struct VerifierConfig {
   pub ry: Vec<Scalar>,
   pub transcript_sat_state: Scalar,
 }
-#[derive(Clone)]
-pub struct VerifierCircuit {
-  pub inner_circuit: R1CSVerificationCircuit,
-  pub inner_proof: GrothProof<I>,
-  pub inner_vk: PreparedVerifyingKey<I>,
-  pub eval_vars_at_ry: Fr,
-  pub claims_phase2: (Fr, Fr, Fr, Fr),
-  pub ry: Vec<Fr>,
-  pub transcript_sat_state: Scalar,
-}
 
-impl VerifierCircuit {
-  pub fn new<R: Rng + CryptoRng>(
-    config: &VerifierConfig,
-    mut rng: &mut R,
-  ) -> Result<Self, SynthesisError> {
-    let inner_circuit = R1CSVerificationCircuit::new(config);
-    let (pk, vk) = Groth16::<I>::setup(inner_circuit.clone(), &mut rng).unwrap();
-    let proof = Groth16::<I>::prove(&pk, inner_circuit.clone(), &mut rng)?;
-    let pvk = Groth16::<I>::process_vk(&vk).unwrap();
-    Ok(Self {
-      inner_circuit,
-      inner_proof: proof,
-      inner_vk: pvk,
-      eval_vars_at_ry: config.eval_vars_at_ry,
-      claims_phase2: config.claims_phase2,
-      ry: config.ry.clone(),
-      transcript_sat_state: config.transcript_sat_state,
-    })
-  }
-}
+// Skeleton for the polynomial commitment verification circuit
+// #[derive(Clone)]
+// pub struct VerifierCircuit {
+//   pub inner_circuit: R1CSVerificationCircuit,
+//   pub inner_proof: GrothProof<I>,
+//   pub inner_vk: PreparedVerifyingKey<I>,
+//   pub eval_vars_at_ry: Fr,
+//   pub claims_phase2: (Fr, Fr, Fr, Fr),
+//   pub ry: Vec<Fr>,
+//   pub transcript_sat_state: Scalar,
+// }
 
-impl ConstraintSynthesizer<Fq> for VerifierCircuit {
-  fn generate_constraints(self, cs: ConstraintSystemRef<Fq>) -> ark_relations::r1cs::Result<()> {
-    let proof_var = ProofVar::<I, IV>::new_witness(cs.clone(), || Ok(self.inner_proof.clone()))?;
-    let (v_A, v_B, v_C, v_AB) = self.claims_phase2;
-    let mut pubs = vec![];
-    pubs.extend(self.ry);
-    pubs.extend(vec![v_A, v_B, v_C, v_AB]);
-    pubs.extend(vec![self.eval_vars_at_ry, self.transcript_sat_state]);
+// impl VerifierCircuit {
+//   pub fn new<R: Rng + CryptoRng>(
+//     config: &VerifierConfig,
+//     mut rng: &mut R,
+//   ) -> Result<Self, SynthesisError> {
+//     let inner_circuit = R1CSVerificationCircuit::new(config);
+//     let (pk, vk) = Groth16::<I>::setup(inner_circuit.clone(), &mut rng).unwrap();
+//     let proof = Groth16::<I>::prove(&pk, inner_circuit.clone(), &mut rng)?;
+//     let pvk = Groth16::<I>::process_vk(&vk).unwrap();
+//     Ok(Self {
+//       inner_circuit,
+//       inner_proof: proof,
+//       inner_vk: pvk,
+//       eval_vars_at_ry: config.eval_vars_at_ry,
+//       claims_phase2: config.claims_phase2,
+//       ry: config.ry.clone(),
+//       transcript_sat_state: config.transcript_sat_state,
+//     })
+//   }
+// }
 
-    let bits = pubs
-      .iter()
-      .map(|c| {
-        let bits: Vec<bool> = BitIteratorLE::new(c.into_bigint().as_ref().to_vec()).collect();
-        Vec::new_witness(cs.clone(), || Ok(bits))
-      })
-      .collect::<Result<Vec<_>, _>>()?;
-    let input_var = BooleanInputVar::<Fr, Fq>::new(bits);
+// impl ConstraintSynthesizer<Fq> for VerifierCircuit {
+//   fn generate_constraints(self, cs: ConstraintSystemRef<Fq>) -> ark_relations::r1cs::Result<()> {
+//     let proof_var = ProofVar::<I, IV>::new_witness(cs.clone(), || Ok(self.inner_proof.clone()))?;
+//     let (v_A, v_B, v_C, v_AB) = self.claims_phase2;
+//     let mut pubs = vec![];
+//     pubs.extend(self.ry);
+//     pubs.extend(vec![v_A, v_B, v_C, v_AB]);
+//     pubs.extend(vec![self.eval_vars_at_ry, self.transcript_sat_state]);
 
-    let vk_var = PreparedVerifyingKeyVar::new_witness(cs, || Ok(self.inner_vk.clone()))?;
-    Groth16VerifierGadget::verify_with_processed_vk(&vk_var, &input_var, &proof_var)?
-      .enforce_equal(&Boolean::constant(true))?;
-    Ok(())
-  }
-}
+//     let bits = pubs
+//       .iter()
+//       .map(|c| {
+//         let bits: Vec<bool> = BitIteratorLE::new(c.into_bigint().as_ref().to_vec()).collect();
+//         Vec::new_witness(cs.clone(), || Ok(bits))
+//       })
+//       .collect::<Result<Vec<_>, _>>()?;
+//     let input_var = BooleanInputVar::<Fr, Fq>::new(bits);
+
+//     let vk_var = PreparedVerifyingKeyVar::new_witness(cs, || Ok(self.inner_vk.clone()))?;
+//     Groth16VerifierGadget::verify_with_processed_vk(&vk_var, &input_var, &proof_var)?
+//       .enforce_equal(&Boolean::constant(true))?;
+//     Ok(())
+//   }
+// }
