@@ -512,16 +512,30 @@ mod tests {
   }
 
   #[test]
-  pub fn check_r1cs_proof() {
+  fn check_r1cs_proof_bls12_377() {
+    let params = poseidon_params();
+    check_r1cs_proof::<ark_bls12_377::Bls12_377>(params);
+  }
+
+  #[test]
+  fn check_r1cs_proof_bls12_381() {
+    let params = crate::parameters::poseidon_params_bls12381();
+    check_r1cs_proof::<ark_bls12_381::Bls12_381>(params);
+  }
+  fn check_r1cs_proof<P>(params: PoseidonConfig<P::ScalarField>)
+  where
+    P: Pairing,
+    P::ScalarField: Absorb,
+  {
     let num_vars = 16;
     let num_cons = num_vars;
     let num_inputs = 3;
     let (inst, vars, input) =
-      R1CSInstance::<F>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
+      R1CSInstance::<P::ScalarField>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
 
-    let gens = R1CSGens::<E>::new(b"test-m", num_cons, num_vars);
+    let gens = R1CSGens::<P>::new(b"test-m", num_cons, num_vars);
 
-    let params = poseidon_params();
+    //let params = poseidon_params();
     // let mut random_tape = RandomTape::new(b"proof");
 
     let mut prover_transcript = PoseidonTranscript::new(&params);
@@ -542,7 +556,7 @@ mod tests {
         &inst_evals,
         &mut verifier_transcript,
         &gens,
-        poseidon_params()
+        params,
       )
       .is_ok());
   }

@@ -97,28 +97,22 @@ impl<F: PrimeField> PoseidonTranscript<F> {
 pub trait TranscriptWriter<F: PrimeField> {
   fn write_to_transcript(&self, transcript: &mut PoseidonTranscript<F>);
 }
-//pub trait AppendToPoseidon {
-//  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript);
-//}
-//
-//impl AppendToPoseidon for CompressedGroup {
-//  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
-//    transcript.append_point(self);
-//  }
-//}
-//
-//impl AppendToPoseidon for Commitment<I> {
-//  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
-//    let mut bytes = Vec::new();
-//    self.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
-//    transcript.append_bytes(&bytes);
-//  }
-//}
-//
-//impl AppendToPoseidon for G1Affine {
-//  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
-//    let mut bytes = Vec::new();
-//    self.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
-//    transcript.append_bytes(&bytes);
-//}
-//
+
+#[cfg(test)]
+mod test {
+  use ark_bls12_381::Fr;
+  use ark_ff::PrimeField;
+  use poseidon_paramgen;
+  #[test]
+  fn poseidon_parameters_generation() {
+    print_modulus::<Fr>();
+    println!(
+      "{}",
+      poseidon_paramgen::poseidon_build::compile::<Fr>(128, vec![2], Fr::MODULUS, true)
+    );
+  }
+
+  fn print_modulus<F: PrimeField>() {
+    println!("modulus: {:?}", F::MODULUS);
+  }
+}
