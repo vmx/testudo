@@ -1,8 +1,9 @@
+use crate::ark_std::UniformRand;
 use crate::parameters::*;
-use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM};
-
 use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
 use ark_crypto_primitives::sponge::CryptographicSponge;
+use ark_ec::{CurveGroup, VariableBaseMSM};
+use rand::SeedableRng;
 use std::ops::Mul;
 
 #[derive(Debug, Clone)]
@@ -23,12 +24,10 @@ impl<G: CurveGroup> MultiCommitGens<G> {
 
     let gens = (0..=n)
       .map(|_| {
-        let mut el_aff: Option<G::Affine> = None;
-        while el_aff.is_none() {
-          let uniform_bytes = sponge.squeeze_bytes(64);
-          el_aff = G::Affine::from_random_bytes(&uniform_bytes);
-        }
-        el_aff.unwrap().clear_cofactor()
+        let mut uniform_bytes = [0u8; 32];
+        uniform_bytes.copy_from_slice(&sponge.squeeze_bytes(32)[..]);
+        let mut prng = rand::rngs::StdRng::from_seed(uniform_bytes);
+        G::Affine::rand(&mut prng)
       })
       .collect::<Vec<_>>();
 
