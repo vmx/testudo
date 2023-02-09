@@ -114,6 +114,7 @@ fn snark_verify_benchmark(c: &mut Criterion) {
             black_box(&inputs),
             black_box(&mut verifier_transcript),
             black_box(&gens)
+            black_box(poseidon_params())
           )
           .is_ok());
       });
