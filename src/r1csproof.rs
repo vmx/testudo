@@ -432,7 +432,7 @@ where
 
 #[cfg(test)]
 mod tests {
-  use crate::parameters::poseidon_params;
+  use crate::parameters::{poseidon_params, poseidon_params_bls12381};
 
   use super::*;
   type F = ark_bls12_377::Fr;
@@ -511,6 +511,11 @@ mod tests {
     assert!(is_sat);
   }
 
+  #[test]
+  fn check_r1cs_proof_ark_blst() {
+    let params = poseidon_params_bls12381();
+    check_r1cs_proof::<ark_blst::Bls12>(params);
+  }
   #[test]
   fn check_r1cs_proof_bls12_377() {
     let params = poseidon_params();

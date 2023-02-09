@@ -175,6 +175,7 @@ pub fn poseidon_params() -> PoseidonConfig<Fr> {
   )
 }
 
+// Generated from poseidon_transcript::test::poseidon_parameters_generation
 pub fn poseidon_params_bls12381() -> PoseidonConfig<ark_bls12_381::Fr> {
   use ark_ff::PrimeField;
 
