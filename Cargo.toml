@@ -91,6 +91,3 @@ blstrs = { git = "https://github.com/nikkolasg/blstrs", branch = "feat/arkwork" 
 ark-ec = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
 ark-ff = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
 ark-serialize = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
-
-[patch."https://github.com/nikkolasg/ark-blst"]
-ark-blst = { path = "../ark-blst" }
