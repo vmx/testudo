@@ -1,38 +1,36 @@
-use super::group::{GroupElement, GroupElementAffine, VartimeMultiscalarMul, GROUP_BASEPOINT};
-use super::scalar::Scalar;
-use crate::group::CompressGroupElement;
 use crate::parameters::*;
-use ark_ec::AffineRepr;
-
-use std::ops::Mul;
+use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM};
 
 use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
 use ark_crypto_primitives::sponge::CryptographicSponge;
+use std::ops::Mul;
 
 #[derive(Debug, Clone)]
-pub struct MultiCommitGens {
+pub struct MultiCommitGens<G: CurveGroup> {
   pub n: usize,
-  pub G: Vec<GroupElement>,
-  pub h: GroupElement,
+  pub G: Vec<G::Affine>,
+  pub h: G::Affine,
 }
 
-impl MultiCommitGens {
+impl<G: CurveGroup> MultiCommitGens<G> {
   pub fn new(n: usize, label: &[u8]) -> Self {
     let params = poseidon_params();
     let mut sponge = PoseidonSponge::new(&params);
     sponge.absorb(&label);
-    sponge.absorb(&GROUP_BASEPOINT.compress().0);
+    let mut b = Vec::new();
+    G::generator().serialize_compressed(&mut b).unwrap();
+    sponge.absorb(&b);
 
-    let mut gens: Vec<GroupElement> = Vec::new();
-    for _ in 0..n + 1 {
-      let mut el_aff: Option<GroupElementAffine> = None;
-      while el_aff.is_none() {
-        let uniform_bytes = sponge.squeeze_bytes(64);
-        el_aff = GroupElementAffine::from_random_bytes(&uniform_bytes);
-      }
-      let el = el_aff.unwrap().clear_cofactor().into_group();
-      gens.push(el);
-    }
+    let gens = (0..=n)
+      .map(|_| {
+        let mut el_aff: Option<G::Affine> = None;
+        while el_aff.is_none() {
+          let uniform_bytes = sponge.squeeze_bytes(64);
+          el_aff = G::Affine::from_random_bytes(&uniform_bytes);
+        }
+        el_aff.unwrap().clear_cofactor()
+      })
+      .collect::<Vec<_>>();
 
     MultiCommitGens {
       n,
@@ -41,7 +39,7 @@ impl MultiCommitGens {
     }
   }
 
-  pub fn clone(&self) -> MultiCommitGens {
+  pub fn clone(&self) -> Self {
     MultiCommitGens {
       n: self.n,
       h: self.h,
@@ -49,7 +47,7 @@ impl MultiCommitGens {
     }
   }
 
-  pub fn split_at(&self, mid: usize) -> (MultiCommitGens, MultiCommitGens) {
+  pub fn split_at(&self, mid: usize) -> (Self, Self) {
     let (G1, G2) = self.G.split_at(mid);
 
     (
@@ -67,27 +65,24 @@ impl MultiCommitGens {
   }
 }
 
-pub trait Commitments {
-  fn commit(&self, blind: &Scalar, gens_n: &MultiCommitGens) -> GroupElement;
-}
+pub struct PedersenCommit;
 
-impl Commitments for Scalar {
-  fn commit(&self, blind: &Scalar, gens_n: &MultiCommitGens) -> GroupElement {
+impl PedersenCommit {
+  pub fn commit_scalar<G: CurveGroup>(
+    scalar: &G::ScalarField,
+    blind: &G::ScalarField,
+    gens_n: &MultiCommitGens<G>,
+  ) -> G {
     assert_eq!(gens_n.n, 1);
-    GroupElement::vartime_multiscalar_mul(&[*self, *blind], &[gens_n.G[0], gens_n.h])
+    <G as VariableBaseMSM>::msm_unchecked(&[gens_n.G[0], gens_n.h], &[*scalar, *blind])
   }
-}
 
-impl Commitments for Vec<Scalar> {
-  fn commit(&self, blind: &Scalar, gens_n: &MultiCommitGens) -> GroupElement {
-    assert_eq!(gens_n.n, self.len());
-    GroupElement::vartime_multiscalar_mul(self, &gens_n.G) + gens_n.h.mul(blind)
-  }
-}
-
-impl Commitments for [Scalar] {
-  fn commit(&self, blind: &Scalar, gens_n: &MultiCommitGens) -> GroupElement {
-    assert_eq!(gens_n.n, self.len());
-    GroupElement::vartime_multiscalar_mul(self, &gens_n.G) + gens_n.h.mul(blind)
+  pub fn commit_slice<G: CurveGroup>(
+    scalars: &[G::ScalarField],
+    blind: &G::ScalarField,
+    gens_n: &MultiCommitGens<G>,
+  ) -> G {
+    assert_eq!(scalars.len(), gens_n.n);
+    <G as VariableBaseMSM>::msm_unchecked(&gens_n.G, scalars) + gens_n.h.mul(blind)
   }
 }

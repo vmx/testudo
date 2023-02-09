@@ -1,3 +1,5 @@
+use crate::poseidon_transcript::PoseidonTranscript;
+use crate::transcript::Transcript;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::CurveGroup;
 use ark_ec::{pairing::Pairing, AffineRepr};
@@ -7,8 +9,7 @@ use ark_poly_commit::multilinear_pc::data_structures::{
   CommitmentG2, CommitterKey, ProofG1, VerifierKey,
 };
 use ark_poly_commit::multilinear_pc::MultilinearPC;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError, Write};
-
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::One;
 use ark_std::Zero;
 use rayon::iter::ParallelIterator;
@@ -27,8 +28,8 @@ pub struct MippProof<E: Pairing> {
 }
 
 impl<E: Pairing> MippProof<E> {
-  pub fn prove<T: Transcript>(
-    transcript: &mut impl Transcript,
+  pub fn prove(
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
     ck: &CommitterKey<E>,
     a: Vec<E::G1Affine>,
     y: Vec<E::ScalarField>,
@@ -177,9 +178,9 @@ impl<E: Pairing> MippProof<E> {
     evals
   }
 
-  pub fn verify<T: Transcript>(
+  pub fn verify(
     vk: &VerifierKey<E>,
-    transcript: &mut impl Transcript,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
     proof: &MippProof<E>,
     point: Vec<E::ScalarField>,
     U: &E::G1Affine,
@@ -405,14 +406,4 @@ pub enum Error {
 
   #[error("Malformed Groth16 verifying key")]
   MalformedVerifyingKey,
-}
-
-/// Transcript is the application level transcript to derive the challenges
-/// needed for Fiat Shamir during aggregation. It is given to the
-/// prover/verifier so that the transcript can be fed with any other data first.
-/// TODO: Make this trait the only Transcript trait
-pub trait Transcript {
-  fn domain_sep(&mut self);
-  fn append<S: CanonicalSerialize>(&mut self, label: &'static [u8], point: &S);
-  fn challenge_scalar<F: PrimeField>(&mut self, label: &'static [u8]) -> F;
 }

@@ -1,46 +1,40 @@
-use crate::{
-  errors::ProofVerifyError,
-  mipp::{Error, MippProof},
-};
-use ark_bls12_377::{Bls12_377 as I, G1Projective as G1};
+use crate::mipp::MippProof;
 use ark_ec::{pairing::Pairing, scalar_mul::variable_base::VariableBaseMSM, CurveGroup};
 use ark_ff::One;
 use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
 };
-
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
-use super::scalar::Scalar;
 use crate::{
   dense_mlpoly::DensePolynomial, math::Math, poseidon_transcript::PoseidonTranscript, timer::Timer,
 };
 
-pub struct Polynomial {
+pub struct Polynomial<E: Pairing> {
   m: usize,
-  polys: Vec<DensePolynomial>,
-  q: Option<DensePolynomial>,
-  chis_b: Option<Vec<Scalar>>,
+  polys: Vec<DensePolynomial<E::ScalarField>>,
+  q: Option<DensePolynomial<E::ScalarField>>,
+  chis_b: Option<Vec<E::ScalarField>>,
 }
 
-impl Polynomial {
+impl<E: Pairing> Polynomial<E> {
   // Given the evaluations over the boolean hypercube of a polynomial p of size
   // 2*m compute the sqrt-sized polynomials p_i as
   // p_i(X) = \sum_{j \in \{0,1\}^m} p(j, i) * chi_j(X)
   // where p(X,Y) = \sum_{i \in \{0,\1}^m}
   //  (\sum_{j \in \{0, 1\}^{m}} p(j, i) * \chi_j(X)) * \chi_i(Y)
   // TODO: add case when the length of the list is not an even power of 2
-  pub fn from_evaluations(Z: &[Scalar]) -> Self {
+  pub fn from_evaluations(Z: &[E::ScalarField]) -> Self {
     let pl_timer = Timer::new("poly_list_build");
     // check the evaluation list is a power of 2
     debug_assert!(Z.len() & (Z.len() - 1) == 0);
     let m = Z.len().log_2() / 2;
     let pow_m = 2_usize.pow(m as u32);
-    let polys: Vec<DensePolynomial> = (0..pow_m)
+    let polys: Vec<DensePolynomial<E::ScalarField>> = (0..pow_m)
       .into_par_iter()
       .map(|i| {
-        let z: Vec<Scalar> = (0..pow_m)
+        let z: Vec<E::ScalarField> = (0..pow_m)
           .into_par_iter()
           // viewing the list of evaluation as a square matrix
           // we select by row j and column i
@@ -60,23 +54,22 @@ impl Polynomial {
   }
 
   // Given point = (\vec{a}, \vec{b}), compute the polynomial q as
-  // q(X) =
-  // \sum_{j \in \{0,1\}^m}chi_j(X) *
-  //  (\sum_{i \in \{0,1\}^m} p(j,i) * chi_i(\vec{b}))
-  // and p(\vec{a},\vec{b}) = q(\vec{b}) where p is the initial polynomial
-  fn get_q(&mut self, point: &[Scalar]) {
+  // q(Y) =
+  // \sum_{j \in \{0,1\}^m}(\sum_{i \in \{0,1\}^m} p(j,i) * chi_i(b)) * chi_j(Y)
+  // and p(a,b) = q(b) where p is the initial polynomial
+  fn get_q(&mut self, point: &[E::ScalarField]) {
     let q_timer = Timer::new("build_q");
     debug_assert!(point.len() == 2 * self.m);
     let _a = &point[0..self.m];
     let b = &point[self.m..2 * self.m];
     let pow_m = 2_usize.pow(self.m as u32);
 
-    let chis: Vec<Scalar> = (0..pow_m)
+    let chis: Vec<E::ScalarField> = (0..pow_m)
       .into_par_iter()
       .map(|i| Self::get_chi_i(b, i))
       .collect();
 
-    let z_q: Vec<Scalar> = (0..pow_m)
+    let z_q: Vec<E::ScalarField> = (0..pow_m)
       .into_par_iter()
       .map(|j| (0..pow_m).map(|i| self.polys[i].Z[j] * chis[i]).sum())
       .collect();
@@ -87,31 +80,30 @@ impl Polynomial {
   }
 
   // Given point = (\vec{a}, \vec{b}) used to construct q
-  // compute q(a) = p(a,b).
-  pub fn eval(&mut self, point: &[Scalar]) -> Scalar {
+  // compute q(b) = p(a,b).
+  pub fn eval(&mut self, point: &[E::ScalarField]) -> E::ScalarField {
     let a = &point[0..point.len() / 2];
     let _b = &point[point.len() / 2..point.len()];
     if self.q.is_none() {
       self.get_q(point);
     }
     let q = self.q.clone().unwrap();
-    let prods = (0..q.Z.len())
+    (0..q.Z.len())
       .into_par_iter()
-      .map(|j| q.Z[j] * Polynomial::get_chi_i(&a, j));
-
-    prods.sum()
+      .map(|j| q.Z[j] * Polynomial::<E>::get_chi_i(&a, j))
+      .sum()
   }
 
-  pub fn commit(&self, ck: &CommitterKey<I>) -> (Vec<Commitment<I>>, <I as Pairing>::TargetField) {
+  pub fn commit(&self, ck: &CommitterKey<E>) -> (Vec<Commitment<E>>, E::TargetField) {
     let timer_commit = Timer::new("sqrt_commit");
 
     let timer_list = Timer::new("comm_list");
 
     // commit to each of the sqrt sized p_i
-    let comm_list: Vec<Commitment<I>> = self
+    let comm_list: Vec<Commitment<E>> = self
       .polys
       .par_iter()
-      .map(|p| MultilinearPC::<I>::commit(&ck, p))
+      .map(|p| MultilinearPC::<E>::commit(&ck, p))
       .collect();
     timer_list.stop();
 
@@ -122,15 +114,15 @@ impl Polynomial {
     let left_pairs: Vec<_> = comm_list
       .clone()
       .into_par_iter()
-      .map(|c| <I as Pairing>::G1Prepared::from(c.g_product))
+      .map(|c| E::G1Prepared::from(c.g_product))
       .collect();
     let right_pairs: Vec<_> = h_vec
       .into_par_iter()
-      .map(|h| <I as Pairing>::G2Prepared::from(h))
+      .map(|h| E::G2Prepared::from(h))
       .collect();
 
     // compute the IPP commitment
-    let t = I::multi_pairing(left_pairs, right_pairs).0;
+    let t = E::multi_pairing(left_pairs, right_pairs).0;
     ipp_timer.stop();
 
     timer_commit.stop();
@@ -139,9 +131,9 @@ impl Polynomial {
   }
 
   // computes \chi_i(\vec{b}) = \prod_{i_j = 0}(1 - b_j)\prod_{i_j = 1}(b_j)
-  pub fn get_chi_i(b: &[Scalar], i: usize) -> Scalar {
+  pub fn get_chi_i(b: &[E::ScalarField], i: usize) -> E::ScalarField {
     let m = b.len();
-    let mut prod = Scalar::one();
+    let mut prod = E::ScalarField::one();
     for j in 0..m {
       let b_j = b[j];
       // iterate from first (msb) to last (lsb) bit of i
@@ -149,7 +141,7 @@ impl Polynomial {
       if i >> (m - j - 1) & 1 == 1 {
         prod = prod * b_j;
       } else {
-        prod = prod * (Scalar::one() - b_j)
+        prod = prod * (E::ScalarField::one() - b_j)
       };
     }
     prod
@@ -157,12 +149,12 @@ impl Polynomial {
 
   pub fn open(
     &mut self,
-    transcript: &mut PoseidonTranscript,
-    comm_list: Vec<Commitment<I>>,
-    ck: &CommitterKey<I>,
-    point: &[Scalar],
-    t: &<I as Pairing>::TargetField,
-  ) -> (Commitment<I>, Proof<I>, MippProof<I>) {
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+    comm_list: Vec<Commitment<E>>,
+    ck: &CommitterKey<E>,
+    point: &[E::ScalarField],
+    t: &E::TargetField,
+  ) -> (Commitment<E>, Proof<E>, MippProof<E>) {
     let m = point.len() / 2;
     let a = &point[0..m];
     if self.q.is_none() {
@@ -187,31 +179,22 @@ impl Polynomial {
 
     let comms: Vec<_> = comm_list.par_iter().map(|c| c.g_product).collect();
 
-    let c_u =
-      <G1 as VariableBaseMSM>::msm_unchecked(comms.as_slice(), chis.as_slice()).into_affine();
+    let c_u = <E::G1 as VariableBaseMSM>::msm_unchecked(&comms, &chis).into_affine();
     timer_msm.stop();
 
-    let U: Commitment<I> = Commitment {
+    let U: Commitment<E> = Commitment {
       nv: q.num_vars,
       g_product: c_u,
     };
-    let comm = MultilinearPC::<I>::commit(ck, &q);
+    let comm = MultilinearPC::<E>::commit(ck, &q);
     debug_assert!(c_u == comm.g_product);
     let h_vec = ck.powers_of_h[0].clone();
 
     // construct MIPP proof that U is the inner product of the vector A
     // and the vector y, where A is the opening vector to T
     let timer_mipp_proof = Timer::new("mipp_prove");
-    let mipp_proof = MippProof::<I>::prove::<PoseidonTranscript>(
-      transcript,
-      ck,
-      comms,
-      chis.to_vec(),
-      h_vec,
-      &c_u,
-      t,
-    )
-    .unwrap();
+    let mipp_proof =
+      MippProof::<E>::prove(transcript, ck, comms, chis.to_vec(), h_vec, &c_u, t).unwrap();
     timer_mipp_proof.stop();
 
     let timer_proof = Timer::new("pst_open");
@@ -223,7 +206,7 @@ impl Polynomial {
     a_rev.reverse();
 
     // construct PST proof for opening q at a
-    let pst_proof = MultilinearPC::<I>::open(ck, &q, &a_rev);
+    let pst_proof = MultilinearPC::<E>::open(ck, &q, &a_rev);
     timer_proof.stop();
 
     timer_open.stop();
@@ -231,14 +214,14 @@ impl Polynomial {
   }
 
   pub fn verify(
-    transcript: &mut PoseidonTranscript,
-    vk: &VerifierKey<I>,
-    U: &Commitment<I>,
-    point: &[Scalar],
-    v: Scalar,
-    pst_proof: &Proof<I>,
-    mipp_proof: &MippProof<I>,
-    T: &<I as Pairing>::TargetField,
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+    vk: &VerifierKey<E>,
+    U: &Commitment<E>,
+    point: &[E::ScalarField],
+    v: E::ScalarField,
+    pst_proof: &Proof<E>,
+    mipp_proof: &MippProof<E>,
+    T: &E::TargetField,
   ) -> bool {
     let len = point.len();
     let a = &point[0..len / 2];
@@ -246,14 +229,7 @@ impl Polynomial {
 
     let timer_mipp_verify = Timer::new("mipp_verify");
     // verify that U = A^y where A is the opening vector of T
-    let res_mipp = MippProof::<I>::verify::<PoseidonTranscript>(
-      vk,
-      transcript,
-      mipp_proof,
-      b.to_vec(),
-      &U.g_product,
-      T,
-    );
+    let res_mipp = MippProof::<E>::verify(vk, transcript, mipp_proof, b.to_vec(), &U.g_product, T);
     assert!(res_mipp == true);
     timer_mipp_verify.stop();
 
@@ -265,7 +241,7 @@ impl Polynomial {
 
     let timer_pst_verify = Timer::new("pst_verify");
     // PST proof that q(a) is indeed equal to value claimed by the prover
-    let res = MultilinearPC::<I>::check(vk, U, &a_rev, v, pst_proof);
+    let res = MultilinearPC::<E>::check(vk, U, &a_rev, v, pst_proof);
     timer_pst_verify.stop();
     res
   }
@@ -277,6 +253,8 @@ mod tests {
   use crate::parameters::poseidon_params;
 
   use super::*;
+  type F = ark_bls12_377::Fr;
+  type E = ark_bls12_377::Bls12_377;
 
   use ark_std::UniformRand;
   #[test]
@@ -284,19 +262,16 @@ mod tests {
     let mut rng = ark_std::test_rng();
     let num_vars = 8;
     let len = 2_usize.pow(num_vars);
-    let Z: Vec<Scalar> = (0..len)
+    let Z: Vec<F> = (0..len).into_iter().map(|_| F::rand(&mut rng)).collect();
+    let r: Vec<F> = (0..num_vars)
       .into_iter()
-      .map(|_| Scalar::rand(&mut rng))
-      .collect();
-    let r: Vec<Scalar> = (0..num_vars)
-      .into_iter()
-      .map(|_| Scalar::rand(&mut rng))
+      .map(|_| F::rand(&mut rng))
       .collect();
 
     let p = DensePolynomial::new(Z.clone());
     let res1 = p.evaluate(&r);
 
-    let mut pl = Polynomial::from_evaluations(&Z.clone());
+    let mut pl = Polynomial::<E>::from_evaluations(&Z.clone());
     let res2 = pl.eval(&r);
 
     assert!(res1 == res2);
@@ -307,17 +282,14 @@ mod tests {
     let mut rng = ark_std::test_rng();
     let num_vars = 4;
     let len = 2_usize.pow(num_vars);
-    let Z: Vec<Scalar> = (0..len)
+    let Z: Vec<F> = (0..len).into_iter().map(|_| F::rand(&mut rng)).collect();
+    let r: Vec<F> = (0..num_vars)
       .into_iter()
-      .map(|_| Scalar::rand(&mut rng))
-      .collect();
-    let r: Vec<Scalar> = (0..num_vars)
-      .into_iter()
-      .map(|_| Scalar::rand(&mut rng))
+      .map(|_| F::rand(&mut rng))
       .collect();
 
-    let gens = MultilinearPC::<I>::setup(2, &mut rng);
-    let (ck, vk) = MultilinearPC::<I>::trim(&gens, 2);
+    let gens = MultilinearPC::<E>::setup(2, &mut rng);
+    let (ck, vk) = MultilinearPC::<E>::trim(&gens, 2);
 
     let mut pl = Polynomial::from_evaluations(&Z.clone());
 

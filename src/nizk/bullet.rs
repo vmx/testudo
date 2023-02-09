@@ -3,28 +3,26 @@
 #![allow(non_snake_case)]
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
+use super::super::errors::ProofVerifyError;
 use crate::math::Math;
 use crate::poseidon_transcript::PoseidonTranscript;
-
-use super::super::errors::ProofVerifyError;
-use super::super::group::{
-  CompressGroupElement, CompressedGroup, DecompressGroupElement, GroupElement,
-  VartimeMultiscalarMul,
-};
-use super::super::scalar::Scalar;
+use crate::transcript::Transcript;
+use ark_ec::AffineRepr;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_serialize::*;
 use ark_std::{One, Zero};
 use core::iter;
+use std::ops::Mul;
 use std::ops::MulAssign;
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
-pub struct BulletReductionProof {
-  L_vec: Vec<CompressedGroup>,
-  R_vec: Vec<CompressedGroup>,
+pub struct BulletReductionProof<G: CurveGroup> {
+  L_vec: Vec<G>,
+  R_vec: Vec<G>,
 }
 
-impl BulletReductionProof {
+impl<G: CurveGroup> BulletReductionProof<G> {
   /// Create an inner-product proof.
   ///
   /// The proof is created with respect to the bases \\(G\\).
@@ -36,21 +34,21 @@ impl BulletReductionProof {
   /// The lengths of the vectors must all be the same, and must all be
   /// either 0 or a power of 2.
   pub fn prove(
-    transcript: &mut PoseidonTranscript,
-    Q: &GroupElement,
-    G_vec: &[GroupElement],
-    H: &GroupElement,
-    a_vec: &[Scalar],
-    b_vec: &[Scalar],
-    blind: &Scalar,
-    blinds_vec: &[(Scalar, Scalar)],
+    transcript: &mut PoseidonTranscript<G::ScalarField>,
+    Q: &G::Affine,
+    G_vec: &[G::Affine],
+    H: &G::Affine,
+    a_vec: &[G::ScalarField],
+    b_vec: &[G::ScalarField],
+    blind: &G::ScalarField,
+    blinds_vec: &[(G::ScalarField, G::ScalarField)],
   ) -> (
-    BulletReductionProof,
-    GroupElement,
-    Scalar,
-    Scalar,
-    GroupElement,
-    Scalar,
+    BulletReductionProof<G>,
+    G,
+    G::ScalarField,
+    G::ScalarField,
+    G,
+    G::ScalarField,
   ) {
     // Create slices G, H, a, b backed by their respective
     // vectors.  This lets us reslice as we compress the lengths
@@ -85,72 +83,70 @@ impl BulletReductionProof {
       let c_R = inner_product(a_R, b_L);
 
       let (blind_L, blind_R) = blinds_iter.next().unwrap();
+      let gright_vec = G_R
+        .iter()
+        .chain(iter::once(Q))
+        .chain(iter::once(H))
+        .cloned()
+        .collect::<Vec<G::Affine>>();
 
-      let L = GroupElement::vartime_multiscalar_mul(
+      let L = G::msm_unchecked(
+        &gright_vec,
         a_L
           .iter()
           .chain(iter::once(&c_L))
           .chain(iter::once(blind_L))
           .copied()
-          .collect::<Vec<Scalar>>()
-          .as_slice(),
-        G_R
-          .iter()
-          .chain(iter::once(Q))
-          .chain(iter::once(H))
-          .copied()
-          .collect::<Vec<GroupElement>>()
+          .collect::<Vec<G::ScalarField>>()
           .as_slice(),
       );
-
-      let R = GroupElement::vartime_multiscalar_mul(
+      let gl_vec = G_L
+        .iter()
+        .chain(iter::once(Q))
+        .chain(iter::once(H))
+        .cloned()
+        .collect::<Vec<G::Affine>>();
+      let R = G::msm_unchecked(
+        &gl_vec,
         a_R
           .iter()
           .chain(iter::once(&c_R))
           .chain(iter::once(blind_R))
           .copied()
-          .collect::<Vec<Scalar>>()
-          .as_slice(),
-        G_L
-          .iter()
-          .chain(iter::once(Q))
-          .chain(iter::once(H))
-          .copied()
-          .collect::<Vec<GroupElement>>()
+          .collect::<Vec<G::ScalarField>>()
           .as_slice(),
       );
 
-      transcript.append_point(&L.compress());
-      transcript.append_point(&R.compress());
+      transcript.append_point(b"", &L);
+      transcript.append_point(b"", &R);
 
-      let u = transcript.challenge_scalar();
+      let u: G::ScalarField = transcript.challenge_scalar(b"");
       let u_inv = u.inverse().unwrap();
 
       for i in 0..n {
         a_L[i] = a_L[i] * u + u_inv * a_R[i];
         b_L[i] = b_L[i] * u_inv + u * b_R[i];
-        G_L[i] = GroupElement::vartime_multiscalar_mul(&[u_inv, u], &[G_L[i], G_R[i]]);
+        G_L[i] = (G_L[i].mul(u_inv) + G_R[i].mul(u)).into_affine();
       }
 
       blind_fin = blind_fin + u * u * blind_L + u_inv * u_inv * blind_R;
 
-      L_vec.push(L.compress());
-      R_vec.push(R.compress());
+      L_vec.push(L);
+      R_vec.push(R);
 
       a = a_L;
       b = b_L;
       G = G_L;
     }
 
-    let Gamma_hat =
-      GroupElement::vartime_multiscalar_mul(&[a[0], a[0] * b[0], blind_fin], &[G[0], *Q, *H]);
+    let Gamma_hat = G::msm_unchecked(&[G[0], *Q, *H], &[a[0], a[0] * b[0], blind_fin]);
 
     (
       BulletReductionProof { L_vec, R_vec },
       Gamma_hat,
       a[0],
       b[0],
-      G[0],
+      G[0].into_group(),
       blind_fin,
     )
   }
@@ -161,8 +157,15 @@ impl BulletReductionProof {
   fn verification_scalars(
     &self,
     n: usize,
-    transcript: &mut PoseidonTranscript,
-  ) -> Result<(Vec<Scalar>, Vec<Scalar>, Vec<Scalar>), ProofVerifyError> {
+    transcript: &mut PoseidonTranscript<G::ScalarField>,
+  ) -> Result<
+    (
+      Vec<G::ScalarField>,
+      Vec<G::ScalarField>,
+      Vec<G::ScalarField>,
+    ),
+    ProofVerifyError,
+  > {
     let lg_n = self.L_vec.len();
     if lg_n >= 32 {
       // 4 billion multiplications should be enough for anyone
@@ -176,16 +179,16 @@ impl BulletReductionProof {
     // 1. Recompute x_k,...,x_1 based on the proof transcript
     let mut challenges = Vec::with_capacity(lg_n);
     for (L, R) in self.L_vec.iter().zip(self.R_vec.iter()) {
-      transcript.append_point(L);
-      transcript.append_point(R);
-      challenges.push(transcript.challenge_scalar());
+      transcript.append_point(b"", L);
+      transcript.append_point(b"", R);
+      challenges.push(transcript.challenge_scalar(b""));
     }
 
     // 2. Compute 1/(u_k...u_1) and 1/u_k, ..., 1/u_1
-    let mut challenges_inv: Vec<Scalar> = challenges.clone();
+    let mut challenges_inv: Vec<G::ScalarField> = challenges.clone();
 
     ark_ff::fields::batch_inversion(&mut challenges_inv);
-    let mut allinv: Scalar = Scalar::one();
+    let mut allinv = G::ScalarField::one();
     for c in challenges.iter().filter(|s| !s.is_zero()) {
       allinv.mul_assign(c);
     }
@@ -221,43 +224,37 @@ impl BulletReductionProof {
   pub fn verify(
     &self,
     n: usize,
-    a: &[Scalar],
-    transcript: &mut PoseidonTranscript,
-    Gamma: &GroupElement,
-    G: &[GroupElement],
-  ) -> Result<(GroupElement, GroupElement, Scalar), ProofVerifyError> {
+    a: &[G::ScalarField],
+    transcript: &mut PoseidonTranscript<G::ScalarField>,
+    Gamma: &G,
+    Gs: &[G::Affine],
+  ) -> Result<(G, G, G::ScalarField), ProofVerifyError> {
     let (u_sq, u_inv_sq, s) = self.verification_scalars(n, transcript)?;
 
-    let Ls = self
-      .L_vec
-      .iter()
-      .map(|p| GroupElement::decompress(p).ok_or(ProofVerifyError::InternalError))
-      .collect::<Result<Vec<_>, _>>()?;
+    let Ls = &self.L_vec;
+    let Rs = &self.R_vec;
 
-    let Rs = self
-      .R_vec
-      .iter()
-      .map(|p| GroupElement::decompress(p).ok_or(ProofVerifyError::InternalError))
-      .collect::<Result<Vec<_>, _>>()?;
-
-    let G_hat = GroupElement::vartime_multiscalar_mul(s.as_slice(), G);
+    let G_hat = G::msm(Gs, s.as_slice()).map_err(|_| ProofVerifyError::InternalError)?;
     let a_hat = inner_product(a, &s);
 
-    let Gamma_hat = GroupElement::vartime_multiscalar_mul(
+    let Gamma_hat = G::msm(
+      &G::normalize_batch(
+        &Ls
+          .iter()
+          .chain(Rs.iter())
+          .chain(iter::once(Gamma))
+          .copied()
+          .collect::<Vec<G>>(),
+      ),
       u_sq
         .iter()
         .chain(u_inv_sq.iter())
-        .chain(iter::once(&Scalar::one()))
+        .chain(iter::once(&G::ScalarField::one()))
         .copied()
-        .collect::<Vec<Scalar>>()
+        .collect::<Vec<G::ScalarField>>()
         .as_slice(),
-      Ls.iter()
-        .chain(Rs.iter())
-        .chain(iter::once(Gamma))
-        .copied()
-        .collect::<Vec<GroupElement>>()
-        .as_slice(),
-    );
+    )
+    .map_err(|_| ProofVerifyError::InternalError)?;
 
     Ok((G_hat, Gamma_hat, a_hat))
   }
@@ -268,12 +265,12 @@ impl BulletReductionProof {
 ///    {\langle {\mathbf{a}}, {\mathbf{b}} \rangle} = \sum\_{i=0}^{n-1} a\_i \cdot b\_i.
 /// \\]
 /// Panics if the lengths of \\(\mathbf{a}\\) and \\(\mathbf{b}\\) are not equal.
-pub fn inner_product(a: &[Scalar], b: &[Scalar]) -> Scalar {
+fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
   assert!(
     a.len() == b.len(),
     "inner_product(a,b): lengths of vectors do not match"
   );
-  let mut out = Scalar::zero();
+  let mut out = F::zero();
   for i in 0..a.len() {
     out += a[i] * b[i];
   }
