@@ -1431,10 +1431,10 @@ pub struct SparseMatPolyEvalProof<E: Pairing> {
   poly_eval_network_proof: PolyEvalNetworkProof<E>,
 }
 
-impl<E> SparseMatPolyEvalProof<E> 
+impl<E> SparseMatPolyEvalProof<E>
 where
-E: Pairing,
-E::ScalarField: Absorb 
+  E: Pairing,
+  E::ScalarField: Absorb,
 {
   fn equalize(
     rx: &[E::ScalarField],

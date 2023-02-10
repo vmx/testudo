@@ -432,7 +432,7 @@ where
 
 #[cfg(test)]
 mod tests {
-  use crate::parameters::poseidon_params;
+  use crate::parameters::{poseidon_params, poseidon_params_bls12381};
 
   use super::*;
   type F = ark_bls12_377::Fr;
@@ -511,15 +511,21 @@ mod tests {
     assert!(is_sat);
   }
 
+  use crate::parameters::PoseidonConfiguration;
+  #[test]
+  fn check_r1cs_proof_ark_blst() {
+    let params = ark_blst::Scalar::poseidon_params();
+    check_r1cs_proof::<ark_blst::Bls12>(params);
+  }
   #[test]
   fn check_r1cs_proof_bls12_377() {
-    let params = poseidon_params();
+    let params = ark_bls12_377::Fr::poseidon_params();
     check_r1cs_proof::<ark_bls12_377::Bls12_377>(params);
   }
 
   #[test]
   fn check_r1cs_proof_bls12_381() {
-    let params = crate::parameters::poseidon_params_bls12381();
+    let params = ark_bls12_381::Fr::poseidon_params();
     check_r1cs_proof::<ark_bls12_381::Bls12_381>(params);
   }
   fn check_r1cs_proof<P>(params: PoseidonConfig<P::ScalarField>)

@@ -23,6 +23,7 @@ ark-ec = { version = "^0.4.0", default-features = false }
 ark-std = { version = "^0.4.0"}
 ark-bls12-377 = { version = "^0.4.0", features = ["r1cs","curve"] }
 ark-bls12-381 = { version = "^0.4.0", features = ["curve"] }
+ark-blst = { git = "https://github.com/nikkolasg/ark-blst" , branch = "feat/absorb" }
 ark-serialize = { version = "^0.4.0", features = ["derive"] }
 ark-crypto-primitives = {version = "^0.4.0", features = ["sponge","r1cs","snark"] }
 ark-r1cs-std = { version = "^0.4.0", default-features = false }
@@ -35,6 +36,8 @@ ark-poly = {version = "^0.4.0"}
 
 poseidon-paramgen = { git = "https://github.com/nikkolasg/poseidon377", branch = "feat/v0.4" }
 poseidon-parameters = { git = "https://github.com/nikkolasg/poseidon377", branch = "feat/v0.4" }
+# Needed for ark-blst 
+blstrs = { version = "^0.6.1", features = ["__private_bench"] }
 
 lazy_static = "1.4.0"
 rand = { version = "0.8", features = [ "std", "std_rng" ] }
@@ -84,4 +87,7 @@ std = ["ark-ff/std", "ark-ec/std", "ark-std/std", "ark-relations/std", "ark-seri
 [patch.crates-io]
 ark-poly-commit = {git = "https://github.com/cryptonetlab/ark-polycommit", branch="feat/pst_on_g2"}
 ark-groth16 = { git = "https://github.com/arkworks-rs/groth16", features = ["r1cs"] }
-
+blstrs = { git = "https://github.com/nikkolasg/blstrs", branch = "feat/arkwork" }
+ark-ec = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
+ark-ff = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
+ark-serialize = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }

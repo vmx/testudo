@@ -37,10 +37,11 @@ pub struct DotProductProofLog<G: CurveGroup> {
   z2: G::ScalarField,
 }
 
-impl<G> DotProductProofLog<G> 
+impl<G> DotProductProofLog<G>
 where
-G: CurveGroup,
-G::ScalarField: Absorb {
+  G: CurveGroup,
+  G::ScalarField: Absorb,
+{
   pub fn prove(
     gens: &DotProductProofGens<G>,
     transcript: &mut PoseidonTranscript<G::ScalarField>,

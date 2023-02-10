@@ -175,6 +175,7 @@ pub fn poseidon_params() -> PoseidonConfig<Fr> {
   )
 }
 
+// Generated from poseidon_transcript::test::poseidon_parameters_generation
 pub fn poseidon_params_bls12381() -> PoseidonConfig<ark_bls12_381::Fr> {
   use ark_ff::PrimeField;
 
@@ -2406,21 +2407,70 @@ pub fn poseidon_params_bls12381() -> PoseidonConfig<ark_bls12_381::Fr> {
     .map(|i| rate1_config.mds.0 .0.row_vector(i).elements)
     .collect::<Vec<Vec<_>>>();
   let arkwork_ark = (0..rate1_config.arc.0.n_rows)
-      .map(|i| rate1_config.arc.0.row_vector(i).elements).collect::<Vec<Vec<_>>>();
+    .map(|i| rate1_config.arc.0.row_vector(i).elements)
+    .collect::<Vec<Vec<_>>>();
   PoseidonConfig {
     full_rounds: rate1_config.rounds.r_F,
     partial_rounds: rate1_config.rounds.r_P,
-    alpha: match rate1_config.alpha { 
-      poseidon_parameters::Alpha::Exponent(alpha) => alpha as u64, 
-      _ => panic!("Alpha is not exponent") 
+    alpha: match rate1_config.alpha {
+      poseidon_parameters::Alpha::Exponent(alpha) => alpha as u64,
+      _ => panic!("Alpha is not exponent"),
     },
     ark: arkwork_ark,
     mds: arkwork_mds,
-    rate: 1, // only hash one at a time
+    rate: 1,     // only hash one at a time
     capacity: 1, // ??
   }
 }
 
+pub trait PoseidonConfiguration: ark_ff::PrimeField {
+  fn poseidon_params() -> PoseidonConfig<Self>;
+}
+
+impl PoseidonConfiguration for ark_bls12_381::Fr {
+  fn poseidon_params() -> PoseidonConfig<Self> {
+    poseidon_params_bls12381()
+  }
+}
+
+impl PoseidonConfiguration for ark_bls12_377::Fr {
+  fn poseidon_params() -> PoseidonConfig<Self> {
+    poseidon_params()
+  }
+}
+
+impl PoseidonConfiguration for ark_blst::Scalar {
+  fn poseidon_params() -> PoseidonConfig<Self> {
+    let config = poseidon_params_bls12381();
+    let arks = config
+      .ark
+      .iter()
+      .map(|v| {
+        v.iter()
+          .map(|&e| ark_blst::Scalar::from(e))
+          .collect::<Vec<_>>()
+      })
+      .collect();
+    let mdss = config
+      .mds
+      .iter()
+      .map(|v| {
+        v.iter()
+          .map(|&e| ark_blst::Scalar::from(e))
+          .collect::<Vec<_>>()
+      })
+      .collect();
+    PoseidonConfig {
+      full_rounds: config.full_rounds,
+      partial_rounds: config.partial_rounds,
+      alpha: config.alpha,
+      ark: arks,
+      mds: mdss,
+      rate: config.rate,
+      capacity: config.capacity,
+    }
+  }
+}
 lazy_static! {
   pub static ref POSEIDON_PARAMETERS_FR_377: PoseidonConfig<Fr> = poseidon_params();
 }
