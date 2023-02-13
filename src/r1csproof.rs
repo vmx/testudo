@@ -52,7 +52,7 @@ pub struct R1CSProof<E: Pairing> {
 
 #[derive(Clone)]
 pub struct R1CSGens<E: Pairing> {
-  gens_pc: PolyCommitmentGens<E>,
+  pub gens_pc: PolyCommitmentGens<E>,
 }
 
 impl<E: Pairing> R1CSGens<E> {
@@ -536,13 +536,19 @@ mod tests {
   {
     fil_logger::maybe_init();
 
-    let num_vars = 1 << 16;
+    let num_vars = 1 << 22;
     let num_cons = num_vars;
     let num_inputs = 3;
     let (inst, vars, input) =
       R1CSInstance::<P::ScalarField>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
 
+    debug!("vmx: key generation: start");
     let gens = R1CSGens::<P>::new(b"test-m", num_cons, num_vars);
+    debug!("vmx: key generation: stop: gens_n size: {}", gens.gens_pc.gens.gens_n.n);
+    let committer_key_size = gens.gens_pc.ck.compressed_size();
+    debug!("vmx: committer key size compressed: {}", committer_key_size);
+    let verifier_key_size = gens.gens_pc.vk.compressed_size();
+    debug!("vmx: verifier key size compressed: {}", verifier_key_size);
 
     //let params = poseidon_params();
     // let mut random_tape = RandomTape::new(b"proof");
