@@ -11,6 +11,7 @@ use crate::transcript::Transcript;
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::pairing::Pairing;
+use log::debug;
 
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
 
@@ -533,7 +534,9 @@ mod tests {
     P: Pairing,
     P::ScalarField: Absorb,
   {
-    let num_vars = 16;
+    fil_logger::maybe_init();
+
+    let num_vars = 1 << 16;
     let num_cons = num_vars;
     let num_inputs = 3;
     let (inst, vars, input) =
@@ -544,11 +547,14 @@ mod tests {
     //let params = poseidon_params();
     // let mut random_tape = RandomTape::new(b"proof");
 
+    debug!("vmx: proving: start");
     let mut prover_transcript = PoseidonTranscript::new(&params);
     let (proof, rx, ry) = R1CSProof::prove(&inst, vars, &input, &gens, &mut prover_transcript);
 
     let inst_evals = inst.evaluate(&rx, &ry);
+    debug!("vmx: proving: stop");
 
+    debug!("vmx: verifying: start");
     let mut verifier_transcript = PoseidonTranscript::new(&params);
 
     // if you want to check the test fails
@@ -565,5 +571,6 @@ mod tests {
         params,
       )
       .is_ok());
+    debug!("vmx: verifying: stop");
   }
 }

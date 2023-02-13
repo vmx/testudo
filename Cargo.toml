@@ -23,7 +23,7 @@ ark-ec = { version = "^0.4.0", default-features = false }
 ark-std = { version = "^0.4.0"}
 ark-bls12-377 = { version = "^0.4.0", features = ["r1cs","curve"] }
 ark-bls12-381 = { version = "^0.4.0", features = ["curve"] }
-ark-blst = { git = "https://github.com/nikkolasg/ark-blst" , branch = "feat/absorb" }
+ark-blst = { git = "https://github.com/nikkolasg/ark-blst" , branch = "vmx" }
 ark-serialize = { version = "^0.4.0", features = ["derive"] }
 ark-crypto-primitives = {version = "^0.4.0", features = ["sponge","r1cs","snark"] }
 ark-r1cs-std = { version = "^0.4.0", default-features = false }
@@ -44,6 +44,8 @@ rand = { version = "0.8", features = [ "std", "std_rng" ] }
 
 tracing = { version = "0.1", default-features = false, features = [ "attributes" ] }
 tracing-subscriber = { version = "0.2" }
+log = "0.4.17"
+fil_logger = "0.1.7"
 
 
 [dev-dependencies]
@@ -79,9 +81,9 @@ debug = true
 [features]
 multicore = ["rayon"]
 profile = []
-default = ["asm","parallel", "std", "multicore"]
+default = ["asm", "parallel", "std", "multicore"]
 asm = ["ark-ff/asm"]
-parallel = [ "std", "ark-ff/parallel", "ark-std/parallel", "ark-ec/parallel", "ark-poly/parallel", "rayon"]
+parallel = ["std", "ark-ff/parallel", "ark-std/parallel", "ark-ec/parallel", "ark-poly/parallel", "rayon"]
 std = ["ark-ff/std", "ark-ec/std", "ark-std/std", "ark-relations/std", "ark-serialize/std"]
 
 [patch.crates-io]
