@@ -536,7 +536,7 @@ mod tests {
   {
     fil_logger::maybe_init();
 
-    let num_vars = 1 << 22;
+    let num_vars = 1 << 16;
     let num_cons = num_vars;
     let num_inputs = 3;
     let (inst, vars, input) =
@@ -546,9 +546,11 @@ mod tests {
     let gens = R1CSGens::<P>::new(b"test-m", num_cons, num_vars);
     debug!("vmx: key generation: stop: gens_n size: {}", gens.gens_pc.gens.gens_n.n);
     let committer_key_size = gens.gens_pc.ck.compressed_size();
-    debug!("vmx: committer key size compressed: {}", committer_key_size);
+    let committer_key_size_uncompressed = gens.gens_pc.ck.uncompressed_size();
+    debug!("vmx: committer key size compressed, uncompressed: {} {}", committer_key_size, committer_key_size_uncompressed);
     let verifier_key_size = gens.gens_pc.vk.compressed_size();
-    debug!("vmx: verifier key size compressed: {}", verifier_key_size);
+    let verifier_key_size_uncompressed = gens.gens_pc.vk.uncompressed_size();
+    debug!("vmx: verifier key size compressed. uncompressed: {} {}", verifier_key_size, verifier_key_size_uncompressed);
 
     //let params = poseidon_params();
     // let mut random_tape = RandomTape::new(b"proof");
