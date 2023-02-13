@@ -18,6 +18,7 @@ use ark_r1cs_std::{
   alloc::{AllocVar, AllocationMode},
   fields::fp::FpVar,
   prelude::{EqGadget, FieldVar},
+  R1CSVar,
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, Namespace, SynthesisError};
 
@@ -34,13 +35,10 @@ impl<F> PoseidonTranscripVar<F>
 where
   F: PrimeField,
 {
-  fn new(cs: ConstraintSystemRef<F>, params: &PoseidonConfig<F>, challenge: Option<F>) -> Self {
+  fn new(cs: ConstraintSystemRef<F>, params: &PoseidonConfig<F>, c_var: FpVar<F>) -> Self {
     let mut sponge = PoseidonSpongeVar::new(cs.clone(), params);
 
-    if let Some(c) = challenge {
-      let c_var = FpVar::<F>::new_witness(cs.clone(), || Ok(c)).unwrap();
-      sponge.absorb(&c_var).unwrap();
-    }
+    sponge.absorb(&c_var).unwrap();
 
     Self { cs, sponge }
   }
@@ -268,8 +266,9 @@ impl<F: PrimeField> R1CSVerificationCircuit<F> {
 /// This section implements the sumcheck verification part of Spartan
 impl<F: PrimeField> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
   fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> ark_relations::r1cs::Result<()> {
+    let initial_challenge_var = FpVar::<F>::new_input(cs.clone(), || Ok(self.prev_challenge))?;
     let mut transcript_var =
-      PoseidonTranscripVar::new(cs.clone(), &self.params, Some(self.prev_challenge));
+      PoseidonTranscripVar::new(cs.clone(), &self.params, initial_challenge_var);
 
     let poly_sc1_vars = self
       .sc_phase1
@@ -288,7 +287,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
     let input_vars = self
       .input
       .iter()
-      .map(|i| FpVar::<F>::new_variable(cs.clone(), || Ok(i), AllocationMode::Witness).unwrap())
+      .map(|i| FpVar::<F>::new_variable(cs.clone(), || Ok(i), AllocationMode::Input).unwrap())
       .collect::<Vec<FpVar<F>>>();
 
     let claimed_ry_vars = self
@@ -370,9 +369,9 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
 
     let (eval_A_r, eval_B_r, eval_C_r) = self.evals;
 
-    let eval_A_r_var = FpVar::<F>::new_witness(cs.clone(), || Ok(eval_A_r))?;
-    let eval_B_r_var = FpVar::<F>::new_witness(cs.clone(), || Ok(eval_B_r))?;
-    let eval_C_r_var = FpVar::<F>::new_witness(cs.clone(), || Ok(eval_C_r))?;
+    let eval_A_r_var = FpVar::<F>::new_input(cs.clone(), || Ok(eval_A_r))?;
+    let eval_B_r_var = FpVar::<F>::new_input(cs.clone(), || Ok(eval_B_r))?;
+    let eval_C_r_var = FpVar::<F>::new_input(cs.clone(), || Ok(eval_C_r))?;
 
     let scalar_var = &r_A_var * &eval_A_r_var + &r_B_var * &eval_B_r_var + &r_C_var * &eval_C_r_var;
 

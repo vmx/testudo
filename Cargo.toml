@@ -64,15 +64,7 @@ name = "nizk"
 path = "profiler/nizk.rs"
 
 [[bench]]
-name = "snark"
-harness = false
-
-[[bench]]
-name = "nizk"
-harness = false
-
-[[bench]]
-name = "r1cs"
+name = "testudo"
 harness = false
 debug = true
 

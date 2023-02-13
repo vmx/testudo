@@ -45,7 +45,7 @@ impl<F: PrimeField> PoseidonTranscript<F> {
 
 impl<F: PrimeField + Absorb> PoseidonTranscript<F> {
   pub fn new_from_state(&mut self, challenge: &F) {
-    self.sponge = PoseidonSponge::new(&self.params);
+    self.sponge = PoseidonSponge::new(&self.params.clone());
     self.append_scalar(b"", challenge);
   }
 }
