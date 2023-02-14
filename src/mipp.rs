@@ -391,21 +391,20 @@ pub enum Error {
   #[error("Serialization error: {0}")]
   Serialization(#[from] SerializationError),
 
-  #[error("Commitment key length invalid")]
-  InvalidKeyLength,
-
   #[error("Vectors length do not match for inner product (IP)")]
   InvalidIPVectorLength,
+  // #[error("Commitment key length invalid")]
+  // InvalidKeyLength,
 
-  #[error("Invalid pairing result")]
-  InvalidPairing,
+  // #[error("Invalid pairing result")]
+  // InvalidPairing,
 
-  #[error("Invalid SRS: {0}")]
-  InvalidSRS(String),
+  // #[error("Invalid SRS: {0}")]
+  // InvalidSRS(String),
 
-  #[error("Invalid proof: {0}")]
-  InvalidProof(String),
+  // #[error("Invalid proof: {0}")]
+  // InvalidProof(String),
 
-  #[error("Malformed Groth16 verifying key")]
-  MalformedVerifyingKey,
+  // #[error("Malformed Groth16 verifying key")]
+  // MalformedVerifyingKey,
 }

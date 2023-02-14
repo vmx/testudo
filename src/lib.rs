@@ -32,7 +32,8 @@ mod r1csproof;
 mod sparse_mlpoly;
 mod sqrt_pst;
 mod sumcheck;
-pub mod testudo;
+pub mod testudo_nizk;
+pub mod testudo_snark;
 mod timer;
 pub(crate) mod transcript;
 mod unipoly;
@@ -42,22 +43,12 @@ pub mod parameters;
 mod constraints;
 pub mod poseidon_transcript;
 
-use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
-use ark_crypto_primitives::sponge::Absorb;
-use ark_serialize::*;
 use core::cmp::max;
-use errors::{ProofVerifyError, R1CSError};
-use transcript::Transcript;
-use transcript::TranscriptWriter;
+use errors::R1CSError;
 
-use poseidon_transcript::PoseidonTranscript;
-use r1csinstance::{
-  R1CSCommitment, R1CSCommitmentGens, R1CSDecommitment, R1CSEvalProof, R1CSInstance,
-};
-use r1csproof::{R1CSGens, R1CSProof};
+use r1csinstance::{R1CSCommitment, R1CSDecommitment, R1CSInstance};
 
 use ark_ec::CurveGroup;
-use timer::Timer;
 
 /// `ComputationCommitment` holds a public preprocessed NP statement (e.g., R1CS)
 pub struct ComputationCommitment<G: CurveGroup> {
@@ -128,7 +119,6 @@ pub type VarsAssignment<F> = Assignment<F>;
 pub type InputsAssignment<F> = Assignment<F>;
 
 /// `Instance` holds the description of R1CS matrices and a hash of the matrices
-#[derive(Debug)]
 pub struct Instance<F: PrimeField> {
   inst: R1CSInstance<F>,
   digest: Vec<u8>,
@@ -303,13 +293,10 @@ pub(crate) fn dot_product<F: PrimeField>(a: &[F], b: &[F]) -> F {
 
 #[cfg(test)]
 mod tests {
-  use crate::parameters::poseidon_params;
 
   use super::*;
-  use crate::ark_std::Zero;
-  use ark_ff::{BigInteger, One, PrimeField};
+
   type F = ark_bls12_377::Fr;
-  type E = ark_bls12_377::Bls12_377;
 
   #[test]
   pub fn check_r1cs_invalid_index() {

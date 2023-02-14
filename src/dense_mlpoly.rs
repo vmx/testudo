@@ -13,13 +13,10 @@ use ark_poly::MultilinearExtension;
 use ark_poly_commit::multilinear_pc::data_structures::{CommitterKey, VerifierKey};
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::*;
-use ark_std::One;
 use core::ops::Index;
-use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
-
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
-
+use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 // TODO: integrate the DenseMultilinearExtension(and Sparse) https://github.com/arkworks-rs/algebra/tree/master/poly/src/evaluations/multivariate/multilinear from arkworks into Spartan. This requires moving the specific Spartan functionalities in separate traits.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, CanonicalDeserialize, CanonicalSerialize)]
 pub struct DensePolynomial<F: PrimeField> {
@@ -577,7 +574,7 @@ where
 
 #[cfg(test)]
 mod tests {
-
+  use crate::ark_std::One;
   use crate::parameters::poseidon_params;
 
   use super::*;

@@ -18,7 +18,6 @@ use ark_r1cs_std::{
   alloc::{AllocVar, AllocationMode},
   fields::fp::FpVar,
   prelude::{EqGadget, FieldVar},
-  R1CSVar,
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, Namespace, SynthesisError};
 
@@ -28,7 +27,6 @@ where
 {
   pub cs: ConstraintSystemRef<F>,
   pub sponge: PoseidonSpongeVar<F>,
-  //pub params: PoseidonConfig<Fr>,
 }
 
 impl<F> PoseidonTranscripVar<F>
@@ -170,7 +168,6 @@ impl<F: PrimeField> AllocVar<SparsePolyEntry<F>, F> for SparsePolyEntryVar<F> {
 
 #[derive(Clone)]
 pub struct SparsePolynomialVar<F: PrimeField> {
-  num_vars: usize,
   Z_var: Vec<SparsePolyEntryVar<F>>,
 }
 
@@ -188,10 +185,7 @@ impl<F: PrimeField> AllocVar<SparsePolynomial<F>, F> for SparsePolynomialVar<F> 
         let spe_var = SparsePolyEntryVar::new_variable(cs.clone(), || Ok(spe), mode)?;
         Z_var.push(spe_var);
       }
-      Ok(Self {
-        num_vars: sp.num_vars,
-        Z_var,
-      })
+      Ok(Self { Z_var })
     })
   }
 }

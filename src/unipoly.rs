@@ -1,9 +1,5 @@
-use crate::{
-  constraints::PoseidonTranscripVar,
-  poseidon_transcript::{PoseidonTranscript, TranscriptWriter},
-  transcript::Transcript,
-};
-use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
+use crate::poseidon_transcript::{PoseidonTranscript, TranscriptWriter};
+use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::{Field, PrimeField};
 use ark_serialize::*;
 // ax^2 + bx + c stored as vec![c,b,a]
@@ -76,31 +72,31 @@ impl<F: Field> UniPoly<F> {
     }
     eval
   }
-  pub fn compress(&self) -> CompressedUniPoly<F> {
-    let coeffs_except_linear_term = [&self.coeffs[..1], &self.coeffs[2..]].concat();
-    assert_eq!(coeffs_except_linear_term.len() + 1, self.coeffs.len());
-    CompressedUniPoly {
-      coeffs_except_linear_term,
-    }
-  }
+  // pub fn compress(&self) -> CompressedUniPoly<F> {
+  //   let coeffs_except_linear_term = [&self.coeffs[..1], &self.coeffs[2..]].concat();
+  //   assert_eq!(coeffs_except_linear_term.len() + 1, self.coeffs.len());
+  //   CompressedUniPoly {
+  //     coeffs_except_linear_term,
+  //   }
+  // }
 }
 
-impl<F: PrimeField> CompressedUniPoly<F> {
-  // we require eval(0) + eval(1) = hint, so we can solve for the linear term as:
-  // linear_term = hint - 2 * constant_term - deg2 term - deg3 term
-  pub fn decompress(&self, hint: &F) -> UniPoly<F> {
-    let mut linear_term =
-      (*hint) - self.coeffs_except_linear_term[0] - self.coeffs_except_linear_term[0];
-    for i in 1..self.coeffs_except_linear_term.len() {
-      linear_term -= self.coeffs_except_linear_term[i];
-    }
+// impl<F: PrimeField> CompressedUniPoly<F> {
+//   // we require eval(0) + eval(1) = hint, so we can solve for the linear term as:
+//   // linear_term = hint - 2 * constant_term - deg2 term - deg3 term
+//   pub fn decompress(&self, hint: &F) -> UniPoly<F> {
+//     let mut linear_term =
+//       (*hint) - self.coeffs_except_linear_term[0] - self.coeffs_except_linear_term[0];
+//     for i in 1..self.coeffs_except_linear_term.len() {
+//       linear_term -= self.coeffs_except_linear_term[i];
+//     }
 
-    let mut coeffs = vec![self.coeffs_except_linear_term[0], linear_term];
-    coeffs.extend(&self.coeffs_except_linear_term[1..]);
-    assert_eq!(self.coeffs_except_linear_term.len() + 1, coeffs.len());
-    UniPoly { coeffs }
-  }
-}
+//     let mut coeffs = vec![self.coeffs_except_linear_term[0], linear_term];
+//     coeffs.extend(&self.coeffs_except_linear_term[1..]);
+//     assert_eq!(self.coeffs_except_linear_term.len() + 1, coeffs.len());
+//     UniPoly { coeffs }
+//   }
+// }
 
 impl<F: PrimeField + Absorb> TranscriptWriter<F> for UniPoly<F> {
   fn write_to_transcript(&self, transcript: &mut PoseidonTranscript<F>) {
@@ -137,12 +133,12 @@ mod tests {
     assert_eq!(poly.coeffs[1], F::from(3 as u8));
     assert_eq!(poly.coeffs[2], F::from(2 as u8));
 
-    let hint = e0 + e1;
-    let compressed_poly = poly.compress();
-    let decompressed_poly = compressed_poly.decompress(&hint);
-    for i in 0..decompressed_poly.coeffs.len() {
-      assert_eq!(decompressed_poly.coeffs[i], poly.coeffs[i]);
-    }
+    // let hint = e0 + e1;
+    // // let compressed_poly = poly.compress();
+    // // let decompressed_poly = compressed_poly.decompress(&hint);
+    // for i in 0..poly.coeffs.len() {
+    //   assert_eq!(poly.coeffs[i], poly.coeffs[i]);
+    // }
 
     let e3 = F::from(28 as u8);
     assert_eq!(poly.evaluate(&F::from(3 as u8)), e3);
@@ -166,12 +162,12 @@ mod tests {
     assert_eq!(poly.coeffs[2], F::from(2));
     assert_eq!(poly.coeffs[3], F::from(1));
 
-    let hint = e0 + e1;
-    let compressed_poly = poly.compress();
-    let decompressed_poly = compressed_poly.decompress(&hint);
-    for i in 0..decompressed_poly.coeffs.len() {
-      assert_eq!(decompressed_poly.coeffs[i], poly.coeffs[i]);
-    }
+    // let hint = e0 + e1;
+    // let compressed_poly = poly.compress();
+    // let decompressed_poly = compressed_poly.decompress(&hint);
+    // for i in 0..decompressed_poly.coeffs.len() {
+    //   assert_eq!(decompressed_poly.coeffs[i], poly.coeffs[i]);
+    // }
 
     let e4 = F::from(109);
     assert_eq!(poly.evaluate(&F::from(4)), e4);

@@ -7,9 +7,8 @@ use ark_ff::PrimeField;
 use ark_serialize::*;
 use libspartan::parameters::PoseidonConfiguration;
 use libspartan::{
-  parameters::poseidon_params,
   poseidon_transcript::PoseidonTranscript,
-  testudo::{self, TestudoGens, TestudoSnark},
+  testudo_snark::{TestudoSnark, TestudoSnarkGens},
   Instance,
 };
 use serde::Serialize;
@@ -66,7 +65,7 @@ where
       Instance::<E::ScalarField>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
     let mut prover_transcript = PoseidonTranscript::new(&params.clone());
 
-    let gens = TestudoGens::<E>::new(num_cons, num_vars, num_inputs, num_cons, params.clone());
+    let gens = TestudoSnarkGens::<E>::new(num_cons, num_vars, num_inputs, num_cons, params.clone());
 
     let (comm, decomm) = TestudoSnark::<E>::encode(&inst, &gens);
 

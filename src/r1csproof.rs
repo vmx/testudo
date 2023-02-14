@@ -24,12 +24,9 @@ use ark_snark::{CircuitSpecificSetupSNARK, SNARK};
 
 use crate::ark_std::UniformRand;
 use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
-use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem};
+
 use ark_serialize::*;
 use ark_std::{One, Zero};
-
-use core::num;
-use std::time::Instant;
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
 pub struct R1CSProof<E: Pairing> {
@@ -86,7 +83,7 @@ where
     let mut rng = rand::thread_rng();
 
     let uni_polys_round1 = (0..num_cons.log_2())
-      .map(|i| {
+      .map(|_i| {
         UniPoly::<E::ScalarField>::from_evals(&[
           E::ScalarField::rand(&mut rng),
           E::ScalarField::rand(&mut rng),
@@ -97,7 +94,7 @@ where
       .collect::<Vec<UniPoly<E::ScalarField>>>();
 
     let uni_polys_round2 = (0..num_vars.log_2() + 1)
-      .map(|i| {
+      .map(|_i| {
         UniPoly::<E::ScalarField>::from_evals(&[
           E::ScalarField::rand(&mut rng),
           E::ScalarField::rand(&mut rng),
@@ -110,7 +107,7 @@ where
       num_vars: num_vars,
       num_cons: num_cons,
       input: (0..num_inputs)
-        .map(|i| E::ScalarField::rand(&mut rng))
+        .map(|_i| E::ScalarField::rand(&mut rng))
         .collect_vec(),
       input_as_sparse_poly: SparsePolynomial::new(
         num_vars.log_2(),
@@ -139,7 +136,7 @@ where
         polys: uni_polys_round2,
       },
       claimed_ry: (0..num_vars.log_2() + 1)
-        .map(|i| E::ScalarField::rand(&mut rng))
+        .map(|_i| E::ScalarField::rand(&mut rng))
         .collect_vec(),
       claimed_transcript_sat_state: E::ScalarField::zero(),
     };
@@ -478,14 +475,12 @@ where
 
 #[cfg(test)]
 mod tests {
-  use crate::parameters::{poseidon_params, poseidon_params_bls12381};
 
   use super::*;
-  type F = ark_bls12_377::Fr;
-  type E = ark_bls12_377::Bls12_377;
 
   use ark_ff::PrimeField;
   use ark_std::UniformRand;
+  type F = ark_bls12_377::Fr;
 
   fn produce_tiny_r1cs() -> (R1CSInstance<F>, Vec<F>, Vec<F>) {
     // three constraints over five variables Z1, Z2, Z3, Z4, and Z5
@@ -553,6 +548,7 @@ mod tests {
 
   #[test]
   fn test_synthetic_r1cs() {
+    type F = ark_bls12_377::Fr;
     let (inst, vars, input) = R1CSInstance::<F>::produce_synthetic_r1cs(1024, 1024, 10);
     let is_sat = inst.is_sat(&vars, &input);
     assert!(is_sat);
