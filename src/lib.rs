@@ -682,16 +682,28 @@ pub(crate) fn dot_product<F: PrimeField>(a: &[F], b: &[F]) -> F {
 
 #[cfg(test)]
 mod tests {
-  use crate::parameters::poseidon_params;
+  use crate::parameters::{poseidon_params, PoseidonConfiguration};
 
   use super::*;
   use crate::ark_std::Zero;
+  use ark_bls12_381::Bls12_381;
   use ark_ff::{BigInteger, One, PrimeField};
-  type F = ark_bls12_377::Fr;
-  type E = ark_bls12_377::Bls12_377;
 
   #[test]
-  pub fn check_snark() {
+  fn check_snark_arkworks_bls12_381() {
+    check_snark::<Bls12_381>();
+  }
+
+  #[test]
+  fn check_snark_arkworks_blst() {
+    check_snark::<ark_blst::Bls12>();
+  }
+
+  pub fn check_snark<E>()
+  where
+    E: Pairing,
+    E::ScalarField: PoseidonConfiguration + Absorb,
+  {
     let num_vars = 256;
     let num_cons = num_vars;
     let num_inputs = 10;
@@ -705,7 +717,7 @@ mod tests {
     // create a commitment to R1CSInstance
     let (comm, decomm) = SNARK::encode(&inst, &gens);
 
-    let params = poseidon_params();
+    let params = E::ScalarField::poseidon_params();
 
     // produce a proof
     let mut prover_transcript = PoseidonTranscript::new(&params);
@@ -727,11 +739,13 @@ mod tests {
         &inputs,
         &mut verifier_transcript,
         &gens,
-        poseidon_params()
+        E::ScalarField::poseidon_params()
       )
       .is_ok());
   }
 
+  type E = ark_bls12_377::Bls12_377;
+  type F = ark_bls12_377::Fr;
   #[test]
   pub fn check_r1cs_invalid_index() {
     let num_cons = 4;
@@ -776,7 +790,6 @@ mod tests {
     assert!(inst.is_err());
     assert_eq!(inst.err(), Some(R1CSError::InvalidScalar));
   }
-
   #[test]
   fn test_padded_constraints() {
     // parameters of the R1CS instance
