@@ -49,7 +49,7 @@ pub struct R1CSProof<E: Pairing> {
   pub mipp_proof: MippProof<E>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct R1CSGens<E: Pairing> {
   gens_pc: PolyCommitmentGens<E>,
 }

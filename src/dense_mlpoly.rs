@@ -175,7 +175,7 @@ impl<'a, 'b, F: PrimeField> SubAssign<&'a DensePolynomial<F>> for DensePolynomia
   }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct PolyCommitmentGens<E: Pairing> {
   pub gens: DotProductProofGens<E::G1>,
   pub ck: CommitterKey<E>,

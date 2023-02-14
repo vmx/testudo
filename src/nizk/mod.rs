@@ -14,7 +14,7 @@ use std::ops::Mul;
 mod bullet;
 use bullet::BulletReductionProof;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct DotProductProofGens<G: CurveGroup> {
   n: usize,
   pub gens_n: MultiCommitGens<G>,

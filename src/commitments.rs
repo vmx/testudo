@@ -3,10 +3,11 @@ use crate::parameters::*;
 use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
 use ark_crypto_primitives::sponge::CryptographicSponge;
 use ark_ec::{CurveGroup, VariableBaseMSM};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use rand::SeedableRng;
 use std::ops::Mul;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct MultiCommitGens<G: CurveGroup> {
   pub n: usize,
   pub G: Vec<G::Affine>,

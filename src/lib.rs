@@ -59,6 +59,7 @@ use ark_ec::CurveGroup;
 use timer::Timer;
 
 /// `ComputationCommitment` holds a public preprocessed NP statement (e.g., R1CS)
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct ComputationCommitment<G: CurveGroup> {
   comm: R1CSCommitment<G>,
 }
@@ -70,7 +71,7 @@ pub struct ComputationDecommitment<F: PrimeField> {
 }
 
 /// `Assignment` holds an assignment of values to either the inputs or variables in an `Instance`
-#[derive(Clone)]
+#[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Assignment<F: PrimeField> {
   assignment: Vec<F>,
 }
@@ -292,6 +293,7 @@ impl<F: PrimeField> Instance<F> {
 }
 
 /// `SNARKGens` holds public parameters for producing and verifying proofs with the Spartan SNARK
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct SNARKGens<E: Pairing> {
   gens_r1cs_sat: R1CSGens<E>,
   gens_r1cs_eval: R1CSCommitmentGens<E>,
@@ -688,6 +690,78 @@ mod tests {
   use crate::ark_std::Zero;
   use ark_bls12_381::Bls12_381;
   use ark_ff::{BigInteger, One, PrimeField};
+
+  #[test]
+  fn check_snark_mixed() {
+    type E1 = ark_bls12_381::Bls12_381;
+    type E2 = ark_blst::Bls12;
+    type F1 = ark_bls12_381::Fr;
+    type F2 = ark_blst::Scalar;
+    type P1 = ark_bls12_381::G1Projective;
+    type P2 = ark_blst::G1Projective;
+
+    let num_vars = 256;
+    let num_cons = num_vars;
+    let num_inputs = 10;
+
+    // produce public generators
+    let gens = SNARKGens::<E2>::new(num_cons, num_vars, num_inputs, num_cons);
+
+    // produce a synthetic R1CSInstance
+    let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
+
+    // create a commitment to R1CSInstance
+    let (comm, decomm) = SNARK::encode(&inst, &gens);
+
+    let params = F2::poseidon_params();
+
+    // produce a proof
+    let mut prover_transcript = PoseidonTranscript::new(&params);
+    let proof = SNARK::prove(
+      &inst,
+      &comm,
+      &decomm,
+      vars,
+      &inputs,
+      &gens,
+      &mut prover_transcript,
+    );
+
+    let mut proof_buffer = Vec::new();
+    proof
+      .serialize_compressed(&mut proof_buffer)
+      .expect("invalid serial");
+    let blst_proof = SNARK::<E1>::deserialize_compressed(&proof_buffer[..]).unwrap();
+
+    let mut comm_buffer = Vec::new();
+    comm
+      .serialize_compressed(&mut comm_buffer)
+      .expect("invalid serial");
+    let blst_comm = ComputationCommitment::<P1>::deserialize_compressed(&comm_buffer[..]).unwrap();
+
+    let mut inputs_buffer = Vec::new();
+    inputs
+      .serialize_compressed(&mut inputs_buffer)
+      .expect("invalid serial");
+    let blst_inputs = Assignment::<F1>::deserialize_compressed(&inputs_buffer[..]).unwrap();
+
+    let mut gens_buffer = Vec::new();
+    gens
+      .serialize_compressed(&mut gens_buffer)
+      .expect("invalid serial");
+    let blst_gens = SNARKGens::<E1>::deserialize_compressed(&gens_buffer[..]).unwrap();
+    // verify the proof
+    let mut verifier_transcript = PoseidonTranscript::new(&F1::poseidon_params());
+    assert!(blst_proof
+      .verify(
+        &blst_comm,
+        &blst_inputs,
+        &mut verifier_transcript,
+        &blst_gens,
+        F1::poseidon_params()
+      )
+      .is_ok());
+  }
 
   #[test]
   fn check_snark_arkworks_bls12_381() {
