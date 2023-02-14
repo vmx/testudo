@@ -15,6 +15,7 @@ use ark_ff::PrimeField;
 use ark_serialize::*;
 use digest::{ExtendableOutput, Input};
 use sha3::Shake256;
+use rand::{rngs::StdRng, SeedableRng};
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct R1CSInstance<F: PrimeField> {
@@ -167,7 +168,7 @@ impl<F: PrimeField> R1CSInstance<F> {
     Timer::print(&format!("number_of_variables {}", num_vars));
     Timer::print(&format!("number_of_inputs {}", num_inputs));
 
-    let mut rng = ark_std::rand::thread_rng();
+    let mut rng = StdRng::seed_from_u64(1234);
 
     // assert num_cons and num_vars are power of 2
     assert_eq!((num_cons.log_2()).pow2(), num_cons);
