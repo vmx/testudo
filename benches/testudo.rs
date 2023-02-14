@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{fs::File, path::Path, time::Instant};
 
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use ark_crypto_primitives::sponge::Absorb;
@@ -9,7 +9,7 @@ use libspartan::parameters::PoseidonConfiguration;
 use libspartan::{
   poseidon_transcript::PoseidonTranscript,
   testudo_snark::{TestudoSnark, TestudoSnarkGens},
-  Instance,
+  ComputationCommitment, ComputationDecommitment, Instance,
 };
 use serde::Serialize;
 
@@ -69,7 +69,31 @@ where
     let gens =
       TestudoSnarkGens::<E>::setup(num_cons, num_vars, num_inputs, num_cons, params.clone());
 
-    let (comm, decomm) = TestudoSnark::<E>::encode(&inst, &gens);
+    let comm_path = "/tmp/testudo.comm";
+    let decomm_path = "/tmp/testudo.decomm";
+    let (comm, decomm) = match Path::new(&comm_path).try_exists() {
+      Ok(false) => {
+        println!("vmx: comm file doesn't exist yet, generate comm/decomm");
+        let (comm, decomm) = TestudoSnark::<E>::encode(&inst, &gens);
+        let comm_file = File::create(comm_path).unwrap();
+        println!("vmx: writing comm at {}", comm_path);
+        comm.serialize_uncompressed(comm_file).unwrap();
+        let decomm_file = File::create(decomm_path).unwrap();
+        println!("vmx: writing decomm at {}", decomm_path);
+        decomm.serialize_uncompressed(decomm_file).unwrap();
+        (comm, decomm)
+      }
+      _ => {
+        println!("vmx: reading in comm file from {}", comm_path);
+        let comm_file = File::open(comm_path).unwrap();
+        let comm = ComputationCommitment::deserialize_uncompressed_unchecked(comm_file).unwrap();
+        println!("vmx: reading in decomm file from {}", decomm_path);
+        let decomm_file = File::open(decomm_path).unwrap();
+        let decomm =
+          ComputationDecommitment::deserialize_uncompressed_unchecked(decomm_file).unwrap();
+        (comm, decomm)
+      }
+    };
 
     let start = Instant::now();
     let proof = TestudoSnark::prove(
