@@ -7,7 +7,7 @@ use super::nizk::{DotProductProofGens, DotProductProofLog};
 use crate::poseidon_transcript::{PoseidonTranscript, TranscriptWriter};
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
-use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_ff::{PrimeField, Zero};
 use ark_poly::MultilinearExtension;
 use ark_poly_commit::multilinear_pc::data_structures::{CommitterKey, VerifierKey};
@@ -191,7 +191,7 @@ impl<E: Pairing> PolyCommitmentGens<E> {
 
     // Generates the SRS and trims it based on the number of variables in the
     // multilinear polynomial.
-    let mut rng = ark_std::test_rng();
+    let mut rng = rand::thread_rng();
     let pst_gens = MultilinearPC::<E>::setup(num_vars / 2, &mut rng);
     let (ck, vk) = MultilinearPC::<E>::trim(&pst_gens, num_vars / 2);
 
@@ -205,7 +205,7 @@ pub struct PolyCommitmentBlinds<F: PrimeField> {
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct PolyCommitment<G: CurveGroup> {
-  C: Vec<G>,
+  C: Vec<G::Affine>,
 }
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
@@ -321,9 +321,20 @@ impl<F: PrimeField> DensePolynomial<F> {
     let R_size = self.Z.len() / L_size;
     assert_eq!(L_size * R_size, self.Z.len());
     let C = (0..L_size)
-      .into_par_iter()
+      .into_iter()
       .map(|i| {
-        PedersenCommit::commit_slice(&self.Z[R_size * i..R_size * (i + 1)], &blinds[i], gens)
+        let slice = &self.Z[R_size * i..R_size * (i + 1)];
+        slice
+          .iter()
+          .inspect(|e| assert!(!e.is_zero(), "scalars are zero"));
+        gens
+          .G
+          .iter()
+          .inspect(|e| assert!(!e.is_zero(), "generators are zero"));
+        let p =
+          PedersenCommit::commit_slice(&self.Z[R_size * i..R_size * (i + 1)], &blinds[i], gens)
+            .into_affine();
+        p
       })
       .collect();
     PolyCommitment { C }
@@ -340,8 +351,11 @@ impl<F: PrimeField> DensePolynomial<F> {
     let C = (0..L_size)
       .map(|i| {
         self.Z[R_size * i..R_size * (i + 1)]
-          .commit(&blinds[i], gens)
-          .compress()
+          .iter()
+          .inspect(|e| assert!(!e.is_zero(), "scalars are zero"));
+
+        PedersenCommit::commit_slice(&self.Z[R_size * i..R_size * (i + 1)], &blinds[i], gens)
+          .into_affine()
       })
       .collect();
     PolyCommitment { C }
@@ -465,7 +479,7 @@ impl<F: PrimeField> Index<usize> for DensePolynomial<F> {
 impl<G: CurveGroup> TranscriptWriter<G::ScalarField> for PolyCommitment<G> {
   fn write_to_transcript(&self, transcript: &mut PoseidonTranscript<G::ScalarField>) {
     for i in 0..self.C.len() {
-      transcript.append_point(b"", &self.C[i]);
+      transcript.append_point(b"", &self.C[i].into_group());
     }
   }
 }
@@ -549,12 +563,40 @@ where
     let (L, R) = eq.compute_factored_evals();
 
     // compute a weighted sum of commitments and L
-    let C_decompressed = &comm.C;
+    //let C_decompressed = &comm.C;
 
-    let C_LZ =
-      <E::G1 as VariableBaseMSM>::msm(&<E::G1 as CurveGroup>::normalize_batch(C_decompressed), &L)
-        .unwrap();
+    //let c_decompressed_affines = <E::G1 as CurveGroup>::normalize_batch(C_decompressed);
+    //let C_LZ = <E::G1 as VariableBaseMSM>::msm(&c_decompressed_affines, &L)
+    let (c, s) : (Vec<_>,Vec<_>) = comm
+      .C
+      .iter()
+      .zip(L.iter())
+      .filter(|(c, _)| !c.is_zero())
+      .unzip();
+    let C_LZ = <E::G1 as VariableBaseMSM>::msm(&c, &s).expect("msm of different length");
 
+    #[cfg(test)]
+    {
+      // Good
+      //crate::tests::hexprint("C_Zr", C_Zr);
+      //crate::tests::hexprint("C_decompressed", &comm.C);
+      //crate::tests::hexprint("C_decompressed_affines", &c_decompressed_affines);
+      crate::tests::hexprint("L", &L);
+      let zero_indices = comm
+        .C
+        .iter()
+        .enumerate()
+        .fold(Vec::new(), |mut agg, (i, e)| {
+          if e.is_zero() {
+            agg.push(i);
+          }
+          agg
+        });
+      println!("zero_indices: {:?}", zero_indices);
+      crate::tests::hexprint("C_LZ", &C_LZ.into_affine());
+      // Good
+      //crate::tests::hexprint("R", &R);
+    }
     self
       .proof
       .verify(R.len(), &gens.gens, transcript, &R, &C_LZ, C_Zr)

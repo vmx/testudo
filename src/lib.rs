@@ -716,6 +716,19 @@ mod tests {
       &mut prover_transcript,
     );
 
+    println!(" VERIFYING WITH ARKWORKS BLS12_381");
+    let mut verifier_transcript = PoseidonTranscript::new(&F1::poseidon_params());
+    assert!(proof
+      .verify(
+        &comm,
+        &inputs,
+        &mut verifier_transcript,
+        &gens,
+        F1::poseidon_params()
+      )
+      .is_ok());
+
+    println!(" VERIFYING WITH BLST");
     let mut proof_buffer = Vec::new();
     proof
       .serialize_compressed(&mut proof_buffer)
@@ -741,6 +754,7 @@ mod tests {
     let blst_gens = SNARKGens::<E2>::deserialize_compressed(&gens_buffer[..]).unwrap();
     // verify the proof
     let mut verifier_transcript = PoseidonTranscript::new(&F2::poseidon_params());
+
     assert!(blst_proof
       .verify(
         &blst_comm,
@@ -949,5 +963,11 @@ mod tests {
         poseidon_params()
       )
       .is_ok());
+  }
+
+  pub fn hexprint<T: CanonicalSerialize>(s: &str, t: &T) {
+    let mut v = Vec::new();
+    t.serialize_compressed(&mut v).unwrap();
+    println!("{}: {}", s, hex::encode(v));
   }
 }
