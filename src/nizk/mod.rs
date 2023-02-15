@@ -168,20 +168,7 @@ where
 
     let lhs = (Gamma_hat.mul(c_s) + beta_s).mul(a_hat_s) + delta_s;
     let rhs = (g_hat + gens.gens_1.G[0].mul(a_hat_s)).mul(z1_s) + gens.gens_1.h.mul(z2_s);
-    #[cfg(test)]
-    {
-      // let to_str = |e: G| -> String {
-      //   let mut v = Vec::new();
-      //   e.serialize_compressed(&mut v).unwrap();
-      //   format!("{:?}", hex::encode(v))
-      // };
-      // println!("Gamma_hat: {:?}", to_str(Gamma_hat));
-      // println!("beta_s : {:?}", to_str(beta_s));
-      // println!("delta_s : {:?}", to_str(delta_s));
-      // println!("lhs: {:?}", to_str(lhs));
-      // println!("rhs: {:?}", to_str(rhs));
-    }
-    debug_assert_eq!(lhs, rhs);
+    assert_eq!(lhs, rhs);
 
     if lhs == rhs {
       Ok(())

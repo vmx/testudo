@@ -324,17 +324,7 @@ impl<F: PrimeField> DensePolynomial<F> {
       .into_iter()
       .map(|i| {
         let slice = &self.Z[R_size * i..R_size * (i + 1)];
-        slice
-          .iter()
-          .inspect(|e| assert!(!e.is_zero(), "scalars are zero"));
-        gens
-          .G
-          .iter()
-          .inspect(|e| assert!(!e.is_zero(), "generators are zero"));
-        let p =
-          PedersenCommit::commit_slice(&self.Z[R_size * i..R_size * (i + 1)], &blinds[i], gens)
-            .into_affine();
-        p
+        PedersenCommit::commit_slice(slice, &blinds[i], gens).into_affine()
       })
       .collect();
     PolyCommitment { C }
@@ -350,10 +340,6 @@ impl<F: PrimeField> DensePolynomial<F> {
     assert_eq!(L_size * R_size, self.Z.len());
     let C = (0..L_size)
       .map(|i| {
-        self.Z[R_size * i..R_size * (i + 1)]
-          .iter()
-          .inspect(|e| assert!(!e.is_zero(), "scalars are zero"));
-
         PedersenCommit::commit_slice(&self.Z[R_size * i..R_size * (i + 1)], &blinds[i], gens)
           .into_affine()
       })
@@ -563,11 +549,9 @@ where
     let (L, R) = eq.compute_factored_evals();
 
     // compute a weighted sum of commitments and L
-    //let C_decompressed = &comm.C;
-
-    //let c_decompressed_affines = <E::G1 as CurveGroup>::normalize_batch(C_decompressed);
-    //let C_LZ = <E::G1 as VariableBaseMSM>::msm(&c_decompressed_affines, &L)
-    let (c, s) : (Vec<_>,Vec<_>) = comm
+    // NOTE: This is necessary because of blst not supporting 0 points in msm
+    // TODO: fix the polycommit generators not being 0 - this should not have to be
+    let (c, s): (Vec<_>, Vec<_>) = comm
       .C
       .iter()
       .zip(L.iter())
@@ -575,28 +559,6 @@ where
       .unzip();
     let C_LZ = <E::G1 as VariableBaseMSM>::msm(&c, &s).expect("msm of different length");
 
-    #[cfg(test)]
-    {
-      // Good
-      //crate::tests::hexprint("C_Zr", C_Zr);
-      //crate::tests::hexprint("C_decompressed", &comm.C);
-      //crate::tests::hexprint("C_decompressed_affines", &c_decompressed_affines);
-      crate::tests::hexprint("L", &L);
-      let zero_indices = comm
-        .C
-        .iter()
-        .enumerate()
-        .fold(Vec::new(), |mut agg, (i, e)| {
-          if e.is_zero() {
-            agg.push(i);
-          }
-          agg
-        });
-      println!("zero_indices: {:?}", zero_indices);
-      crate::tests::hexprint("C_LZ", &C_LZ.into_affine());
-      // Good
-      //crate::tests::hexprint("R", &R);
-    }
     self
       .proof
       .verify(R.len(), &gens.gens, transcript, &R, &C_LZ, C_Zr)

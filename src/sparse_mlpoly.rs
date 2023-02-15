@@ -950,8 +950,6 @@ where
     transcript.append_scalar_vector(b"", &evals_ops);
     // evals_ops.append_to_transcript(b"claim_evals_ops", transcript);
     let challenges_ops = transcript.challenge_scalar_vec(b"", evals_ops.len().log_2());
-    #[cfg(test)]
-    crate::tests::hexprint("challenge_ops", &challenges_ops);
 
     let mut poly_evals_ops = DensePolynomial::new(evals_ops);
     for i in (0..challenges_ops.len()).rev() {
@@ -1544,8 +1542,6 @@ where
     // produce a random element from the transcript for hash function
     let r_mem_check = transcript.challenge_scalar_vec(b"", 2);
 
-    #[cfg(test)]
-    crate::tests::hexprint("r_mem_check", &r_mem_check);
     self.poly_eval_network_proof.verify(
       comm,
       &self.comm_derefs,

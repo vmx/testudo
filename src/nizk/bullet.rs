@@ -193,25 +193,6 @@ impl<G: CurveGroup> BulletReductionProof<G> {
       allinv.mul_assign(c);
     }
     allinv = allinv.inverse().unwrap();
-    #[cfg(test)]
-    {
-      let to_str = |e: G| -> String {
-        let mut v = Vec::new();
-        e.serialize_compressed(&mut v).unwrap();
-        format!("{:?}", hex::encode(v))
-      };
-      let to_strf = |e: G::ScalarField| -> String {
-        let mut v = Vec::new();
-        e.serialize_compressed(&mut v).unwrap();
-        format!("{:?}", hex::encode(v))
-      };
-      println!(
-        "challenges: {:?}",
-        challenges.iter().map(|e| to_strf(*e)).collect::<Vec<_>>()
-      );
-      println!("allinv: {}", to_strf(allinv));
-      println!(" ----- ")
-    }
 
     // 3. Compute u_i^2 and (1/u_i)^2
     for i in 0..lg_n {
@@ -255,22 +236,6 @@ impl<G: CurveGroup> BulletReductionProof<G> {
 
     let G_hat = G::msm(Gs, s.as_slice()).map_err(|_| ProofVerifyError::InternalError)?;
     let a_hat = inner_product(a, &s);
-    #[cfg(test)]
-    {
-      // let to_str = |e: G| -> String {
-      //   let mut v = Vec::new();
-      //   e.serialize_compressed(&mut v).unwrap();
-      //   format!("{:?}", hex::encode(v))
-      // };
-      // let to_strf = |e: G::ScalarField| -> String {
-      //   let mut v = Vec::new();
-      //   e.serialize_compressed(&mut v).unwrap();
-      //   format!("{:?}", hex::encode(v))
-      // };
-      // println!("G_hat: {:?}", to_str(G_hat));
-      // println!("a_hat : {:?}", to_strf(a_hat));
-      // println!(" ----- ")
-    }
     let Gamma_hat = G::msm(
       &G::normalize_batch(
         &Ls
