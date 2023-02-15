@@ -27,8 +27,11 @@ fn main() {
     TestudoSnarkGens::<Bls12>::new(num_cons, num_vars, num_inputs, num_cons, params.clone());
   debug!("vmx: key generation: stop");
 
+  debug!("vmx: encode: start");
   let (comm, decomm) = TestudoSnark::encode(&inst, &gens);
+  debug!("vmx: encode: stop");
 
+  debug!("vmx: prove: start");
   let start = Instant::now();
   let proof = TestudoSnark::prove(
     &inst,
@@ -42,12 +45,15 @@ fn main() {
   )
   .unwrap();
   let duration = start.elapsed().as_millis();
+  debug!("vmx: prove: stop");
   debug!("proving time: {}ms", duration);
 
   let mut verifier_transcript = PoseidonTranscript::new(&params);
   let start = Instant::now();
 
+  debug!("vmx: verify: start");
   let res = proof.verify(&gens, &comm, &inputs, &mut verifier_transcript, params);
+  debug!("vmx: verify: stop");
   assert!(res.is_ok());
   let duration = start.elapsed().as_millis();
   debug!("verification time: {}", duration);

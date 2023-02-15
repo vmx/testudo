@@ -14,8 +14,8 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use ark_serialize::*;
 use digest::{ExtendableOutput, Input};
-use sha3::Shake256;
 use rand::{rngs::StdRng, SeedableRng};
+use sha3::Shake256;
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct R1CSInstance<F: PrimeField> {

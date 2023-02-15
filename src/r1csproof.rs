@@ -183,6 +183,7 @@ where
     Vec<E::ScalarField>,
     Vec<E::ScalarField>,
   ) {
+    log::debug!("vmx: prove phase one: start");
     let comb_func =
       |poly_tau_comp: &E::ScalarField,
        poly_A_comp: &E::ScalarField,
@@ -201,6 +202,7 @@ where
       transcript,
     );
 
+    log::debug!("vmx: prove phase one: stop");
     (sc_proof_phase_one, r, claims)
   }
 
@@ -215,6 +217,7 @@ where
     Vec<E::ScalarField>,
     Vec<E::ScalarField>,
   ) {
+    log::debug!("vmx: prove phase two: start");
     let comb_func = |poly_A_comp: &E::ScalarField,
                      poly_B_comp: &E::ScalarField|
      -> E::ScalarField { (*poly_A_comp) * poly_B_comp };
@@ -222,6 +225,7 @@ where
       claim, num_rounds, evals_z, evals_ABC, comb_func, transcript,
     );
 
+    log::debug!("vmx: prove phase two: stop");
     (sc_proof_phase_two, r, claims)
   }
 

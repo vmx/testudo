@@ -99,12 +99,17 @@ impl<E: Pairing> Polynomial<E> {
 
     let timer_list = Timer::new("comm_list");
 
+    log::debug!(
+      "vmx: sqrt_pst: possible number of MSM to call at once: start: {}",
+      self.polys.len()
+    );
     // commit to each of the sqrt sized p_i
     let comm_list: Vec<Commitment<E>> = self
       .polys
       .par_iter()
       .map(|p| MultilinearPC::<E>::commit(&ck, p))
       .collect();
+    log::debug!("vmx: sqrt_pst: possible number of MSM to call at once: stop");
     timer_list.stop();
 
     let h_vec = ck.powers_of_h[0].clone();

@@ -158,6 +158,7 @@ where
     };
     timer_eval.stop();
 
+    log::debug!("vmx: testudo: r1cs eval proof: start");
     let timer_eval_proof = Timer::new("r1cs_eval_proof");
     let r1cs_eval_proof = R1CSEvalProof::prove(
       &decomm.decomm,
@@ -168,6 +169,7 @@ where
       transcript,
     );
     timer_eval_proof.stop();
+    log::debug!("vmx: testudo: r1cs eval proof: stop");
 
     transcript.new_from_state(&c);
     let timer_sat_circuit_verification = Timer::new("r1cs_sat_circuit_verification_proof");
