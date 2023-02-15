@@ -7,7 +7,7 @@ use super::sparse_mlpoly::{
 };
 use super::timer::Timer;
 use crate::poseidon_transcript::{PoseidonTranscript, TranscriptWriter};
-use crate::transcript::Transcript;
+
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;

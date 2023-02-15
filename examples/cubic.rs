@@ -11,9 +11,10 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{BigInteger, PrimeField};
 use ark_std::{One, UniformRand, Zero};
+use libspartan::testudo_snark::{TestudoSnark, TestudoSnarkGens};
 use libspartan::{
   parameters::poseidon_params, poseidon_transcript::PoseidonTranscript, InputsAssignment, Instance,
-  SNARKGens, VarsAssignment, SNARK,
+  VarsAssignment,
 };
 
 #[allow(non_snake_case)]
@@ -129,14 +130,20 @@ fn main() {
   let params = poseidon_params();
 
   // produce public parameters
-  let gens = SNARKGens::<E>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+  let gens = TestudoSnarkGens::<E>::new(
+    num_cons,
+    num_vars,
+    num_inputs,
+    num_non_zero_entries,
+    params.clone(),
+  );
 
   // create a commitment to the R1CS instance
-  let (comm, decomm) = SNARK::encode(&inst, &gens);
+  let (comm, decomm) = TestudoSnark::encode(&inst, &gens);
 
   // produce a proof of satisfiability
   let mut prover_transcript = PoseidonTranscript::new(&params);
-  let proof = SNARK::prove(
+  let proof = TestudoSnark::prove(
     &inst,
     &comm,
     &decomm,
@@ -144,16 +151,18 @@ fn main() {
     &assignment_inputs,
     &gens,
     &mut prover_transcript,
-  );
+    params.clone(),
+  )
+  .unwrap();
 
   // verify the proof of satisfiability
   let mut verifier_transcript = PoseidonTranscript::new(&params);
   assert!(proof
     .verify(
+      &gens,
       &comm,
       &assignment_inputs,
       &mut verifier_transcript,
-      &gens,
       params
     )
     .is_ok());

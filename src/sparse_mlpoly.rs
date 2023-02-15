@@ -1578,33 +1578,31 @@ impl<F: PrimeField> SparsePolynomial<F> {
     SparsePolynomial { num_vars, Z }
   }
 
-  // TF IS THIS??
+  // fn compute_chi(a: &[bool], r: &[F]) -> F {
+  //   assert_eq!(a.len(), r.len());
+  //   let mut chi_i = F::one();
+  //   for j in 0..r.len() {
+  //     if a[j] {
+  //       chi_i *= r[j];
+  //     } else {
+  //       chi_i *= F::one() - r[j];
+  //     }
+  //   }
+  //   chi_i
+  // }
 
-  fn compute_chi(a: &[bool], r: &[F]) -> F {
-    assert_eq!(a.len(), r.len());
-    let mut chi_i = F::one();
-    for j in 0..r.len() {
-      if a[j] {
-        chi_i *= r[j];
-      } else {
-        chi_i *= F::one() - r[j];
-      }
-    }
-    chi_i
-  }
+  // // Takes O(n log n). TODO: do this in O(n) where n is the number of entries in Z
+  // pub fn evaluate(&self, r: &[F]) -> F {
+  //   assert_eq!(self.num_vars, r.len());
 
-  // Takes O(n log n). TODO: do this in O(n) where n is the number of entries in Z
-  pub fn evaluate(&self, r: &[F]) -> F {
-    assert_eq!(self.num_vars, r.len());
-
-    (0..self.Z.len())
-      .map(|i| {
-        let bits = self.Z[i].idx.get_bits(r.len());
-        println!("{:?}", bits);
-        SparsePolynomial::compute_chi(&bits, r) * self.Z[i].val
-      })
-      .sum()
-  }
+  //   (0..self.Z.len())
+  //     .map(|i| {
+  //       let bits = self.Z[i].idx.get_bits(r.len());
+  //       println!("{:?}", bits);
+  //       SparsePolynomial::compute_chi(&bits, r) * self.Z[i].val
+  //     })
+  //     .sum()
+  // }
 }
 
 #[cfg(test)]

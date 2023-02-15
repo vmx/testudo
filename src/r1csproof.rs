@@ -1,18 +1,20 @@
 #![allow(clippy::too_many_arguments)]
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyCommitmentGens};
 use super::errors::ProofVerifyError;
-use crate::constraints::{R1CSVerificationCircuit, VerifierConfig};
+use crate::constraints::{R1CSVerificationCircuit, SumcheckVerificationCircuit, VerifierConfig};
 use crate::math::Math;
 use crate::mipp::MippProof;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
 use crate::transcript::Transcript;
+use crate::unipoly::UniPoly;
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::pairing::Pairing;
 
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
+use itertools::Itertools;
 
 use super::r1csinstance::R1CSInstance;
 
@@ -20,17 +22,16 @@ use super::sparse_mlpoly::{SparsePolyEntry, SparsePolynomial};
 use super::timer::Timer;
 use ark_snark::{CircuitSpecificSetupSNARK, SNARK};
 
-use ark_groth16::Groth16;
-use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem};
+use crate::ark_std::UniformRand;
+use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
+
 use ark_serialize::*;
 use ark_std::{One, Zero};
-
-use std::time::Instant;
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
 pub struct R1CSProof<E: Pairing> {
   // The PST commitment to the multilinear extension of the witness.
-  comm: Commitment<E>,
+  pub comm: Commitment<E>,
   sc_proof_phase1: SumcheckInstanceProof<E::ScalarField>,
   claims_phase2: (
     E::ScalarField,
@@ -39,26 +40,129 @@ pub struct R1CSProof<E: Pairing> {
     E::ScalarField,
   ),
   sc_proof_phase2: SumcheckInstanceProof<E::ScalarField>,
-  eval_vars_at_ry: E::ScalarField,
-  proof_eval_vars_at_ry: Proof<E>,
+  pub eval_vars_at_ry: E::ScalarField,
+  pub proof_eval_vars_at_ry: Proof<E>,
   rx: Vec<E::ScalarField>,
   ry: Vec<E::ScalarField>,
   // The transcript state after the satisfiability proof was computed.
   pub transcript_sat_state: E::ScalarField,
+  pub initial_state: E::ScalarField,
   pub t: E::TargetField,
   pub mipp_proof: MippProof<E>,
 }
 
-#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
+pub struct R1CSVerifierProof<E: Pairing> {
+  comm: Commitment<E>,
+  circuit_proof: ark_groth16::Proof<E>,
+  initial_state: E::ScalarField,
+  transcript_sat_state: E::ScalarField,
+  eval_vars_at_ry: E::ScalarField,
+  ry: Vec<E::ScalarField>,
+  proof_eval_vars_at_ry: Proof<E>,
+  t: E::TargetField,
+  mipp_proof: MippProof<E>,
+}
+
+#[derive(Clone)]
+pub struct CircuitGens<E: Pairing> {
+  pk: ProvingKey<E>,
+  vk: VerifyingKey<E>,
+}
+
+impl<E> CircuitGens<E>
+where
+  E: Pairing,
+{
+  pub fn new(
+    num_cons: usize,
+    num_vars: usize,
+    num_inputs: usize,
+    poseidon: PoseidonConfig<E::ScalarField>,
+  ) -> Self {
+    let mut rng = rand::thread_rng();
+
+    let uni_polys_round1 = (0..num_cons.log_2())
+      .map(|_i| {
+        UniPoly::<E::ScalarField>::from_evals(&[
+          E::ScalarField::rand(&mut rng),
+          E::ScalarField::rand(&mut rng),
+          E::ScalarField::rand(&mut rng),
+          E::ScalarField::rand(&mut rng),
+        ])
+      })
+      .collect::<Vec<UniPoly<E::ScalarField>>>();
+
+    let uni_polys_round2 = (0..num_vars.log_2() + 1)
+      .map(|_i| {
+        UniPoly::<E::ScalarField>::from_evals(&[
+          E::ScalarField::rand(&mut rng),
+          E::ScalarField::rand(&mut rng),
+          E::ScalarField::rand(&mut rng),
+        ])
+      })
+      .collect::<Vec<UniPoly<E::ScalarField>>>();
+
+    let circuit = R1CSVerificationCircuit {
+      num_vars: num_vars,
+      num_cons: num_cons,
+      input: (0..num_inputs)
+        .map(|_i| E::ScalarField::rand(&mut rng))
+        .collect_vec(),
+      input_as_sparse_poly: SparsePolynomial::new(
+        num_vars.log_2(),
+        (0..num_inputs + 1)
+          .map(|i| SparsePolyEntry::new(i, E::ScalarField::rand(&mut rng)))
+          .collect::<Vec<SparsePolyEntry<E::ScalarField>>>(),
+      ),
+      evals: (
+        E::ScalarField::zero(),
+        E::ScalarField::zero(),
+        E::ScalarField::zero(),
+      ),
+      params: poseidon,
+      prev_challenge: E::ScalarField::zero(),
+      claims_phase2: (
+        E::ScalarField::zero(),
+        E::ScalarField::zero(),
+        E::ScalarField::zero(),
+        E::ScalarField::zero(),
+      ),
+      eval_vars_at_ry: E::ScalarField::zero(),
+      sc_phase1: SumcheckVerificationCircuit {
+        polys: uni_polys_round1,
+      },
+      sc_phase2: SumcheckVerificationCircuit {
+        polys: uni_polys_round2,
+      },
+      claimed_ry: (0..num_vars.log_2() + 1)
+        .map(|_i| E::ScalarField::rand(&mut rng))
+        .collect_vec(),
+      claimed_transcript_sat_state: E::ScalarField::zero(),
+    };
+    let (pk, vk) = Groth16::<E>::setup(circuit.clone(), &mut rng).unwrap();
+    CircuitGens { pk, vk }
+  }
+}
+
+#[derive(Clone)]
 pub struct R1CSGens<E: Pairing> {
   gens_pc: PolyCommitmentGens<E>,
+  gens_gc: CircuitGens<E>,
 }
 
 impl<E: Pairing> R1CSGens<E> {
-  pub fn new(label: &'static [u8], _num_cons: usize, num_vars: usize) -> Self {
+  pub fn new(
+    label: &'static [u8],
+    num_cons: usize,
+    num_vars: usize,
+    num_inputs: usize,
+    poseidon: PoseidonConfig<E::ScalarField>,
+  ) -> Self {
     let num_poly_vars = num_vars.log_2();
     let gens_pc = PolyCommitmentGens::new(num_poly_vars, label);
-    R1CSGens { gens_pc }
+    let gens_gc = CircuitGens::new(num_cons, num_vars, num_inputs, poseidon);
+    R1CSGens { gens_pc, gens_gc }
   }
 }
 
@@ -146,8 +250,8 @@ where
     // comm.write_to_transcript(transcript);
     timer_commit.stop();
 
-    let c = transcript.challenge_scalar(b"");
-    transcript.new_from_state(&c);
+    let initial_state = transcript.challenge_scalar(b"");
+    transcript.new_from_state(&initial_state);
 
     transcript.append_scalar_vector(b"", &input);
 
@@ -223,8 +327,8 @@ where
       transcript,
     );
     timer_sc_proof_phase2.stop();
-    let c = transcript.challenge_scalar(b"");
-    transcript.new_from_state(&c);
+    let transcript_sat_state = transcript.challenge_scalar(b"");
+    transcript.new_from_state(&transcript_sat_state);
 
     // TODO: modify the polynomial evaluation in Spartan to be consistent
     // with the evaluation in ark-poly-commit so that reversing is not needed
@@ -233,10 +337,6 @@ where
 
     let (comm, proof_eval_vars_at_ry, mipp_proof) =
       pl.open(transcript, comm_list, &gens.gens_pc.ck, &ry[1..], &t);
-    println!(
-      "proof size (no of quotients): {:?}",
-      proof_eval_vars_at_ry.proofs.len()
-    );
 
     timmer_opening.stop();
 
@@ -247,6 +347,7 @@ where
     (
       R1CSProof {
         comm,
+        initial_state,
         sc_proof_phase1,
         claims_phase2: (*Az_claim, *Bz_claim, *Cz_claim, prod_Az_Bz_claims),
         sc_proof_phase2,
@@ -254,7 +355,7 @@ where
         proof_eval_vars_at_ry,
         rx: rx.clone(),
         ry: ry.clone(),
-        transcript_sat_state: c,
+        transcript_sat_state,
         t,
         mipp_proof,
       },
@@ -263,7 +364,7 @@ where
     )
   }
 
-  pub fn verify_groth16(
+  pub fn prove_verifier(
     &self,
     num_vars: usize,
     num_cons: usize,
@@ -272,11 +373,12 @@ where
     transcript: &mut PoseidonTranscript<E::ScalarField>,
     gens: &R1CSGens<E>,
     poseidon: PoseidonConfig<E::ScalarField>,
-  ) -> Result<(u128, u128, u128), ProofVerifyError> {
+  ) -> Result<R1CSVerifierProof<E>, ProofVerifyError> {
     // serialise and add the IPP commitment to the transcript
     transcript.append_gt::<E>(b"", &self.t);
 
-    let c = transcript.challenge_scalar(b"");
+    let initial_state = transcript.challenge_scalar(b"");
+    transcript.new_from_state(&initial_state);
 
     let mut input_as_sparse_poly_entries = vec![SparsePolyEntry::new(0, E::ScalarField::one())];
     //remaining inputs
@@ -285,10 +387,8 @@ where
         .map(|i| SparsePolyEntry::new(i + 1, input[i]))
         .collect::<Vec<SparsePolyEntry<E::ScalarField>>>(),
     );
-
-    let n = num_vars;
     let input_as_sparse_poly =
-      SparsePolynomial::new(n.log_2() as usize, input_as_sparse_poly_entries);
+      SparsePolynomial::new(num_vars.log_2() as usize, input_as_sparse_poly_entries);
 
     let config = VerifierConfig {
       num_vars,
@@ -296,7 +396,7 @@ where
       input: input.to_vec(),
       evals: *evals,
       params: poseidon,
-      prev_challenge: c,
+      prev_challenge: initial_state,
       claims_phase2: self.claims_phase2,
       polys_sc1: self.sc_proof_phase1.polys.clone(),
       polys_sc2: self.sc_proof_phase2.polys.clone(),
@@ -309,136 +409,78 @@ where
 
     let circuit = R1CSVerificationCircuit::new(&config);
 
-    // this is universal, we don't measure it
-    // TODO put this _outside_ the verification
-    let start = Instant::now();
-    let (pk, vk) = Groth16::<E>::setup(circuit.clone(), &mut rand::thread_rng()).unwrap();
-    let ds = start.elapsed().as_millis();
+    let circuit_prover_timer = Timer::new("provecircuit");
+    let proof = Groth16::<E>::prove(&gens.gens_gc.pk, circuit, &mut rand::thread_rng()).unwrap();
+    circuit_prover_timer.stop();
 
-    let prove_outer = Timer::new("provecircuit");
-    let start = Instant::now();
-    let proof = Groth16::<E>::prove(&pk, circuit, &mut rand::thread_rng()).unwrap();
-    let dp = start.elapsed().as_millis();
-    prove_outer.stop();
-
-    let timer_verification = Timer::new("verification");
-    let start = Instant::now();
-
-    /// TODO : they are not necessary ?
-    let (v_A, v_B, v_C, v_AB) = self.claims_phase2;
-
-    let mut pubs = vec![];
-    pubs.extend(self.ry.clone());
-    pubs.extend(vec![self.eval_vars_at_ry, self.transcript_sat_state]);
-
-    transcript.new_from_state(&self.transcript_sat_state);
-    par! {
-      // verifies the Groth16 proof for the spartan verifier
-      let is_verified = Groth16::<E>::verify(&vk, &pubs, &proof).unwrap(),
-
-      // verifies the proof of opening against the result of evaluating the
-      // witness polynomial at point ry
-      let res = Polynomial::verify(
-      transcript,
-      &gens.gens_pc.vk,
-      &self.comm,
-      &self.ry[1..],
-      self.eval_vars_at_ry,
-      &self.proof_eval_vars_at_ry,
-      &self.mipp_proof,
-      &self.t,
-    )
-    };
-    let dv = start.elapsed().as_millis();
-    timer_verification.stop();
-
-    assert!(res == true && is_verified == true);
-
-    Ok((ds, dp, dv))
-  }
-
-  // Helper function to find the number of constraint in the circuit which
-  // requires executing it.
-  pub fn circuit_size(
-    &self,
-    num_vars: usize,
-    num_cons: usize,
-    input: &[E::ScalarField],
-    evals: &(E::ScalarField, E::ScalarField, E::ScalarField),
-    transcript: &mut PoseidonTranscript<E::ScalarField>,
-    _gens: &R1CSGens<E>,
-    poseidon: PoseidonConfig<E::ScalarField>,
-  ) -> Result<usize, ProofVerifyError> {
-    // serialise and add the IPP commitment to the transcript
-    transcript.append_gt::<E>(b"", &self.t);
-
-    let c: E::ScalarField = transcript.challenge_scalar(b"");
-
-    let mut input_as_sparse_poly_entries = vec![SparsePolyEntry::new(0, E::ScalarField::one())];
-    //remaining inputs
-    input_as_sparse_poly_entries.extend(
-      (0..input.len())
-        .map(|i| SparsePolyEntry::new(i + 1, input[i]))
-        .collect::<Vec<SparsePolyEntry<E::ScalarField>>>(),
-    );
-
-    let n = num_vars;
-    let input_as_sparse_poly =
-      SparsePolynomial::new(n.log_2() as usize, input_as_sparse_poly_entries);
-
-    let config = VerifierConfig {
-      num_vars,
-      num_cons,
-      input: input.to_vec(),
-      evals: *evals,
-      params: poseidon,
-      prev_challenge: c,
-      claims_phase2: self.claims_phase2,
-      polys_sc1: self.sc_proof_phase1.polys.clone(),
-      polys_sc2: self.sc_proof_phase2.polys.clone(),
-      eval_vars_at_ry: self.eval_vars_at_ry,
-      input_as_sparse_poly,
-      ry: self.ry.clone(),
+    Ok(R1CSVerifierProof {
       comm: self.comm.clone(),
+      circuit_proof: proof,
+      initial_state: self.initial_state,
       transcript_sat_state: self.transcript_sat_state,
-    };
-
-    let _rng = ark_std::test_rng();
-    let circuit = R1CSVerificationCircuit::new(&config);
-    let cs = ConstraintSystem::<E::ScalarField>::new_ref();
-    circuit.generate_constraints(cs.clone()).unwrap();
-    assert!(cs.is_satisfied().unwrap());
-
-    Ok(cs.num_constraints())
+      eval_vars_at_ry: self.eval_vars_at_ry,
+      ry: self.ry.clone(),
+      proof_eval_vars_at_ry: self.proof_eval_vars_at_ry.clone(),
+      t: self.t,
+      mipp_proof: self.mipp_proof.clone(),
+    })
   }
 }
 
-// fn verify_constraints_outer(circuit: VerifierCircuit, _num_cons: &usize) -> usize {
-//   let cs = ConstraintSystem::<Fq>::new_ref();
-//   circuit.generate_constraints(cs.clone()).unwrap();
-//   assert!(cs.is_satisfied().unwrap());
-//   cs.num_constraints()
-// }
+impl<E: Pairing> R1CSVerifierProof<E>
+where
+  <E as Pairing>::ScalarField: Absorb,
+{
+  pub fn verify(
+    &self,
+    input: &[E::ScalarField],
+    evals: &(E::ScalarField, E::ScalarField, E::ScalarField),
+    transcript: &mut PoseidonTranscript<E::ScalarField>,
+    gens: &R1CSGens<E>,
+  ) -> Result<bool, ProofVerifyError> {
+    let (Ar, Br, Cr) = evals;
+    let mut pubs = vec![self.initial_state];
+    pubs.extend(input.clone());
+    pubs.extend(self.ry.clone());
+    pubs.extend(vec![
+      self.eval_vars_at_ry,
+      *Ar,
+      *Br,
+      *Cr,
+      self.transcript_sat_state,
+    ]);
+    transcript.new_from_state(&self.transcript_sat_state);
+    par! {
+      // verifies the Groth16 proof for the spartan verifier
+      let is_verified = Groth16::<E>::verify(&gens.gens_gc.vk, &pubs, &self.circuit_proof).unwrap(),
 
-// fn verify_constraints_inner(circuit: VerifierCircuit, _num_cons: &usize) -> usize {
-//   let cs = ConstraintSystem::<Fr>::new_ref();
-//   circuit
-//     .inner_circuit
-//     .generate_constraints(cs.clone())
-//     .unwrap();
-//   assert!(cs.is_satisfied().unwrap());
-//   cs.num_constraints()
-// }
+      // verifies the proof of opening against the result of evaluating the
+      // witness polynomial at point ry
+        let res = Polynomial::verify(
+        transcript,
+        &gens.gens_pc.vk,
+        &self.comm,
+        &self.ry[1..],
+        self.eval_vars_at_ry,
+        &self.proof_eval_vars_at_ry,
+        &self.mipp_proof,
+        &self.t,
+      )
+    };
+    assert!(is_verified == true);
+    assert!(res == true);
+    Ok(is_verified && res)
+  }
+}
 
 #[cfg(test)]
 mod tests {
-  use crate::parameters::{poseidon_params, poseidon_params_bls12381};
 
   use super::*;
-  type F = ark_bls12_377::Fr;
-  type E = ark_bls12_377::Bls12_377;
 
+  use ark_ff::PrimeField;
   use ark_std::UniformRand;
+  type F = ark_bls12_377::Fr;
 
   fn produce_tiny_r1cs() -> (R1CSInstance<F>, Vec<F>, Vec<F>) {
     // three constraints over five variables Z1, Z2, Z3, Z4, and Z5
@@ -506,6 +548,7 @@ mod tests {
 
   #[test]
   fn test_synthetic_r1cs() {
+    type F = ark_bls12_377::Fr;
     let (inst, vars, input) = R1CSInstance::<F>::produce_synthetic_r1cs(1024, 1024, 10);
     let is_sat = inst.is_sat(&vars, &input);
     assert!(is_sat);
@@ -531,39 +574,46 @@ mod tests {
   fn check_r1cs_proof<P>(params: PoseidonConfig<P::ScalarField>)
   where
     P: Pairing,
+    P::ScalarField: PrimeField,
     P::ScalarField: Absorb,
   {
-    let num_vars = 16;
+    let num_vars = 1024;
     let num_cons = num_vars;
     let num_inputs = 3;
     let (inst, vars, input) =
       R1CSInstance::<P::ScalarField>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
 
-    let gens = R1CSGens::<P>::new(b"test-m", num_cons, num_vars);
+    let gens = R1CSGens::<P>::new(b"test-m", num_cons, num_vars, num_inputs, params.clone());
 
     //let params = poseidon_params();
     // let mut random_tape = RandomTape::new(b"proof");
 
-    let mut prover_transcript = PoseidonTranscript::new(&params);
+    let mut prover_transcript = PoseidonTranscript::new(&params.clone());
+    let c = prover_transcript.challenge_scalar::<P::ScalarField>(b"");
+    prover_transcript.new_from_state(&c);
     let (proof, rx, ry) = R1CSProof::prove(&inst, vars, &input, &gens, &mut prover_transcript);
 
     let inst_evals = inst.evaluate(&rx, &ry);
 
-    let mut verifier_transcript = PoseidonTranscript::new(&params);
+    prover_transcript.new_from_state(&c);
+    let verifer_proof = proof
+      .prove_verifier(
+        num_vars,
+        num_cons,
+        &input,
+        &inst_evals,
+        &mut prover_transcript,
+        &gens,
+        params.clone(),
+      )
+      .unwrap();
+
+    let mut verifier_transcript = PoseidonTranscript::new(&params.clone());
+    assert!(verifer_proof
+      .verify(&input, &inst_evals, &mut verifier_transcript, &gens)
+      .is_ok());
 
     // if you want to check the test fails
     // input[0] = Scalar::zero();
-
-    assert!(proof
-      .verify_groth16(
-        inst.get_num_vars(),
-        inst.get_num_cons(),
-        &input,
-        &inst_evals,
-        &mut verifier_transcript,
-        &gens,
-        params,
-      )
-      .is_ok());
   }
 }

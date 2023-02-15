@@ -29,7 +29,7 @@ ark-crypto-primitives = {version = "^0.4.0", features = ["sponge","r1cs","snark"
 ark-r1cs-std = { version = "^0.4.0", default-features = false }
 ark-relations = { version = "^0.4.0", default-features = false, optional = true }
 ark-snark = { version = "^0.4.0", default-features = false }
-ark-groth16 = { version = "^0.3.0", features = ["r1cs"] }
+ark-groth16 = { version = "^0.3.0" }
 ark-bw6-761 = { version = "^0.4.0" }
 ark-poly-commit = { version = "^0.4.0" }
 ark-poly = {version = "^0.4.0"}
@@ -57,25 +57,12 @@ name = "libspartan"
 path = "src/lib.rs"
 
 [[bin]]
-name = "snark"
-path = "profiler/snark.rs"
-
-[[bin]]
-name = "nizk"
-path = "profiler/nizk.rs"
+name = "testudo"
+path = "profiler/testudo.rs"
 
 [[bench]]
-name = "snark"
+name = "testudo"
 harness = false
-
-[[bench]]
-name = "nizk"
-harness = false
-
-[[bench]]
-name = "r1cs"
-harness = false
-debug = true
 
 [features]
 multicore = ["rayon"]
@@ -87,8 +74,8 @@ std = ["ark-ff/std", "ark-ec/std", "ark-std/std", "ark-relations/std", "ark-seri
 
 [patch.crates-io]
 ark-poly-commit = {git = "https://github.com/cryptonetlab/ark-polycommit", branch="feat/pst_on_g2"}
-ark-groth16 = { git = "https://github.com/arkworks-rs/groth16", features = ["r1cs"] }
+ark-groth16 = { git = "https://github.com/arkworks-rs/groth16" }
 blstrs = { git = "https://github.com/nikkolasg/blstrs", branch = "feat/arkwork" }
 ark-ec = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
 ark-ff = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
-ark-serialize = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
+ark-serialize = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned", features= ["derive"] }

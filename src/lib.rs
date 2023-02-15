@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 #![doc = include_str!("../README.md")]
-#![feature(test)]
 #![allow(clippy::assertions_on_result_states)]
 
 extern crate ark_std;
@@ -10,7 +9,6 @@ extern crate lazy_static;
 extern crate merlin;
 extern crate rand;
 extern crate sha3;
-extern crate test;
 
 #[macro_use]
 extern crate json;
@@ -32,6 +30,8 @@ mod r1csproof;
 mod sparse_mlpoly;
 mod sqrt_pst;
 mod sumcheck;
+pub mod testudo_nizk;
+pub mod testudo_snark;
 mod timer;
 pub(crate) mod transcript;
 mod unipoly;
@@ -41,25 +41,15 @@ pub mod parameters;
 mod constraints;
 pub mod poseidon_transcript;
 
-use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
-use ark_crypto_primitives::sponge::Absorb;
-use ark_serialize::*;
 use core::cmp::max;
-use errors::{ProofVerifyError, R1CSError};
-use transcript::Transcript;
-use transcript::TranscriptWriter;
+use errors::R1CSError;
 
-use poseidon_transcript::PoseidonTranscript;
-use r1csinstance::{
-  R1CSCommitment, R1CSCommitmentGens, R1CSDecommitment, R1CSEvalProof, R1CSInstance,
-};
-use r1csproof::{R1CSGens, R1CSProof};
+use r1csinstance::{R1CSCommitment, R1CSDecommitment, R1CSInstance};
 
 use ark_ec::CurveGroup;
-use timer::Timer;
 
 /// `ComputationCommitment` holds a public preprocessed NP statement (e.g., R1CS)
-#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug)]
 pub struct ComputationCommitment<G: CurveGroup> {
   comm: R1CSCommitment<G>,
 }
@@ -71,7 +61,7 @@ pub struct ComputationDecommitment<F: PrimeField> {
 }
 
 /// `Assignment` holds an assignment of values to either the inputs or variables in an `Instance`
-#[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Clone)]
 pub struct Assignment<F: PrimeField> {
   assignment: Vec<F>,
 }
@@ -128,7 +118,6 @@ pub type VarsAssignment<F> = Assignment<F>;
 pub type InputsAssignment<F> = Assignment<F>;
 
 /// `Instance` holds the description of R1CS matrices and a hash of the matrices
-#[derive(Debug)]
 pub struct Instance<F: PrimeField> {
   inst: R1CSInstance<F>,
   digest: Vec<u8>,
@@ -292,376 +281,6 @@ impl<F: PrimeField> Instance<F> {
   }
 }
 
-/// `SNARKGens` holds public parameters for producing and verifying proofs with the Spartan SNARK
-#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
-pub struct SNARKGens<E: Pairing> {
-  gens_r1cs_sat: R1CSGens<E>,
-  gens_r1cs_eval: R1CSCommitmentGens<E>,
-}
-
-impl<E: Pairing> SNARKGens<E> {
-  /// Constructs a new `SNARKGens` given the size of the R1CS statement
-  /// `num_nz_entries` specifies the maximum number of non-zero entries in any of the three R1CS matrices
-  pub fn new(num_cons: usize, num_vars: usize, num_inputs: usize, num_nz_entries: usize) -> Self {
-    let num_vars_padded = {
-      let mut num_vars_padded = max(num_vars, num_inputs + 1);
-      if num_vars_padded != num_vars_padded.next_power_of_two() {
-        num_vars_padded = num_vars_padded.next_power_of_two();
-      }
-      num_vars_padded
-    };
-
-    let gens_r1cs_sat = R1CSGens::new(b"gens_r1cs_sat", num_cons, num_vars_padded);
-    let gens_r1cs_eval = R1CSCommitmentGens::new(
-      b"gens_r1cs_eval",
-      num_cons,
-      num_vars_padded,
-      num_inputs,
-      num_nz_entries,
-    );
-    SNARKGens {
-      gens_r1cs_sat,
-      gens_r1cs_eval,
-    }
-  }
-}
-
-use ark_ec::pairing::Pairing;
-/// `SNARK` holds a proof produced by Spartan SNARK
-#[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
-pub struct SNARK<E: Pairing> {
-  r1cs_sat_proof: R1CSProof<E>,
-  inst_evals: (E::ScalarField, E::ScalarField, E::ScalarField),
-  r1cs_eval_proof: R1CSEvalProof<E>,
-  rx: Vec<E::ScalarField>,
-  ry: Vec<E::ScalarField>,
-}
-
-impl<E> SNARK<E>
-where
-  E: Pairing,
-  E::ScalarField: Absorb,
-{
-  /// A public computation to create a commitment to an R1CS instance
-  pub fn encode(
-    inst: &Instance<E::ScalarField>,
-    gens: &SNARKGens<E>,
-  ) -> (
-    ComputationCommitment<E::G1>,
-    ComputationDecommitment<E::ScalarField>,
-  ) {
-    let timer_encode = Timer::new("SNARK::encode");
-    let (comm, decomm) = inst.inst.commit(&gens.gens_r1cs_eval);
-    timer_encode.stop();
-    (
-      ComputationCommitment { comm },
-      ComputationDecommitment { decomm },
-    )
-  }
-
-  /// A method to produce a SNARK proof of the satisfiability of an R1CS instance
-  pub fn prove(
-    inst: &Instance<E::ScalarField>,
-    comm: &ComputationCommitment<E::G1>,
-    decomm: &ComputationDecommitment<E::ScalarField>,
-    vars: VarsAssignment<E::ScalarField>,
-    inputs: &InputsAssignment<E::ScalarField>,
-    gens: &SNARKGens<E>,
-    transcript: &mut PoseidonTranscript<E::ScalarField>,
-  ) -> Self {
-    let timer_prove = Timer::new("SNARK::prove");
-
-    // transcript.append_protocol_name(SNARK::protocol_name());
-    comm.comm.write_to_transcript(transcript);
-
-    let (r1cs_sat_proof, rx, ry) = {
-      let (proof, rx, ry) = {
-        // we might need to pad variables
-        let padded_vars = {
-          let num_padded_vars = inst.inst.get_num_vars();
-          let num_vars = vars.assignment.len();
-          if num_padded_vars > num_vars {
-            vars.pad(num_padded_vars)
-          } else {
-            vars
-          }
-        };
-
-        R1CSProof::prove(
-          &inst.inst,
-          padded_vars.assignment,
-          &inputs.assignment,
-          &gens.gens_r1cs_sat,
-          transcript,
-        )
-      };
-
-      (proof, rx, ry)
-    };
-
-    // We need to reset the transcript state before starting the evaluation
-    // proof and share this state with the verifier because, on the verifier's
-    // side all the previous updates are done on the transcript
-    // circuit variable and the transcript outside the circuit will be
-    // inconsistent wrt to the prover's.
-    // transcript.new_from_state(&r1cs_sat_proof.transcript_sat_state);
-
-    // We send evaluations of A, B, C at r = (rx, ry) as claims
-    // to enable the verifier complete the first sum-check
-    let timer_eval = Timer::new("eval_sparse_polys");
-    let inst_evals = {
-      let (Ar, Br, Cr) = inst.inst.evaluate(&rx, &ry);
-      transcript.append_scalar(b"", &Ar);
-      transcript.append_scalar(b"", &Br);
-      transcript.append_scalar(b"", &Cr);
-      (Ar, Br, Cr)
-    };
-    timer_eval.stop();
-
-    let r1cs_eval_proof = {
-      let proof = R1CSEvalProof::prove(
-        &decomm.decomm,
-        &rx,
-        &ry,
-        &inst_evals,
-        &gens.gens_r1cs_eval,
-        transcript,
-      );
-
-      proof
-    };
-
-    timer_prove.stop();
-    SNARK {
-      r1cs_sat_proof,
-      inst_evals,
-      r1cs_eval_proof,
-      rx,
-      ry,
-    }
-  }
-
-  /// A method to verify the SNARK proof of the satisfiability of an R1CS instance
-  pub fn verify(
-    &self,
-    comm: &ComputationCommitment<E::G1>,
-    input: &InputsAssignment<E::ScalarField>,
-    transcript: &mut PoseidonTranscript<E::ScalarField>,
-    gens: &SNARKGens<E>,
-    poseidon: PoseidonConfig<E::ScalarField>,
-  ) -> Result<(u128, u128, u128), ProofVerifyError> {
-    let timer_verify = Timer::new("SNARK::verify");
-    // transcript.append_protocol_name(SNARK::protocol_name());
-
-    // append a commitment to the computation to the transcript
-    comm.comm.write_to_transcript(transcript);
-
-    let timer_sat_proof = Timer::new("verify_sat_proof");
-    assert_eq!(input.assignment.len(), comm.comm.get_num_inputs());
-    // let (rx, ry) =
-    let res = self.r1cs_sat_proof.verify_groth16(
-      comm.comm.get_num_vars(),
-      comm.comm.get_num_cons(),
-      &input.assignment,
-      &self.inst_evals,
-      transcript,
-      &gens.gens_r1cs_sat,
-      poseidon,
-    )?;
-    timer_sat_proof.stop();
-
-    let timer_eval_proof = Timer::new("verify_eval_proof");
-    // Reset the transcript using the state sent by the prover.
-    // TODO: find a way to retrieve this state from the circuit. Currently
-    // the API for generating constraints doesn't support returning values
-    // computed inside the circuit.
-    // transcript.new_from_state(&self.r1cs_sat_proof.transcript_sat_state);
-
-    let (Ar, Br, Cr) = &self.inst_evals;
-    transcript.append_scalar(b"", Ar);
-    transcript.append_scalar(b"", Br);
-    transcript.append_scalar(b"", Cr);
-
-    self.r1cs_eval_proof.verify(
-      &comm.comm,
-      &self.rx,
-      &self.ry,
-      &self.inst_evals,
-      &gens.gens_r1cs_eval,
-      transcript,
-    )?;
-    timer_eval_proof.stop();
-    timer_verify.stop();
-    Ok(res)
-  }
-}
-
-#[derive(Clone)]
-/// `NIZKGens` holds public parameters for producing and verifying proofs with the Spartan NIZK
-pub struct NIZKGens<E: Pairing> {
-  gens_r1cs_sat: R1CSGens<E>,
-}
-
-impl<E: Pairing> NIZKGens<E> {
-  /// Constructs a new `NIZKGens` given the size of the R1CS statement
-  pub fn new(num_cons: usize, num_vars: usize, num_inputs: usize) -> Self {
-    let num_vars_padded = {
-      let mut num_vars_padded = max(num_vars, num_inputs + 1);
-      if num_vars_padded != num_vars_padded.next_power_of_two() {
-        num_vars_padded = num_vars_padded.next_power_of_two();
-      }
-      num_vars_padded
-    };
-
-    let gens_r1cs_sat = R1CSGens::new(b"gens_r1cs_sat", num_cons, num_vars_padded);
-    NIZKGens { gens_r1cs_sat }
-  }
-}
-
-/// `NIZK` holds a proof produced by Spartan NIZK
-#[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
-pub struct NIZK<E: Pairing> {
-  r1cs_sat_proof: R1CSProof<E>,
-  r: (Vec<E::ScalarField>, Vec<E::ScalarField>),
-}
-
-impl<E> NIZK<E>
-where
-  E: Pairing,
-  E::ScalarField: Absorb,
-{
-  /// A method to produce a NIZK proof of the satisfiability of an R1CS instance
-  pub fn prove(
-    inst: &Instance<E::ScalarField>,
-    vars: VarsAssignment<E::ScalarField>,
-    input: &InputsAssignment<E::ScalarField>,
-    gens: &NIZKGens<E>,
-    transcript: &mut PoseidonTranscript<E::ScalarField>,
-  ) -> Self {
-    let timer_prove = Timer::new("NIZK::prove");
-    // transcript.append_protocol_name(NIZK::protocol_name());
-    transcript.append_bytes(b"", &inst.digest);
-
-    let (r1cs_sat_proof, rx, ry) = {
-      // we might need to pad variables
-      let padded_vars = {
-        let num_padded_vars = inst.inst.get_num_vars();
-        let num_vars = vars.assignment.len();
-        if num_padded_vars > num_vars {
-          vars.pad(num_padded_vars)
-        } else {
-          vars
-        }
-      };
-
-      let (proof, rx, ry) = R1CSProof::prove(
-        &inst.inst,
-        padded_vars.assignment,
-        &input.assignment,
-        &gens.gens_r1cs_sat,
-        transcript,
-      );
-      let mut proof_encoded = Vec::new();
-      proof
-        .serialize_with_mode(&mut proof_encoded, Compress::Yes)
-        .unwrap();
-      Timer::print(&format!("len_r1cs_sat_proof {:?}", proof_encoded.len()));
-      (proof, rx, ry)
-    };
-
-    timer_prove.stop();
-    NIZK {
-      r1cs_sat_proof,
-      r: (rx, ry),
-    }
-  }
-
-  /// A method to verify a NIZK proof of the satisfiability of an R1CS instance
-  pub fn verify(
-    &self,
-    inst: &Instance<E::ScalarField>,
-    input: &InputsAssignment<E::ScalarField>,
-    transcript: &mut PoseidonTranscript<E::ScalarField>,
-    gens: &NIZKGens<E>,
-    poseidon: PoseidonConfig<E::ScalarField>,
-  ) -> Result<usize, ProofVerifyError> {
-    let timer_verify = Timer::new("NIZK::verify");
-
-    transcript.append_bytes(b"", &inst.digest);
-
-    // We send evaluations of A, B, C at r = (rx, ry) as claims
-    // to enable the verifier complete the first sum-check
-    // let timer_eval = Timer::new("eval_sparse_polys");
-    let (claimed_rx, claimed_ry) = &self.r;
-    let inst_evals = inst.inst.evaluate(claimed_rx, claimed_ry);
-    // timer_eval.stop();
-
-    let timer_sat_proof = Timer::new("verify_sat_proof");
-    assert_eq!(input.assignment.len(), inst.inst.get_num_inputs());
-    // let (rx, ry) =
-    let nc = self.r1cs_sat_proof.circuit_size(
-      inst.inst.get_num_vars(),
-      inst.inst.get_num_cons(),
-      &input.assignment,
-      &inst_evals,
-      transcript,
-      &gens.gens_r1cs_sat,
-      poseidon,
-    )?;
-
-    // verify if claimed rx and ry are correct
-    // assert_eq!(rx, *claimed_rx);
-    // assert_eq!(ry, *claimed_ry);
-    timer_sat_proof.stop();
-    timer_verify.stop();
-
-    Ok(nc)
-  }
-
-  /// A method to verify a NIZK proof of the satisfiability of an R1CS instance with Groth16
-  pub fn verify_groth16(
-    &self,
-    inst: &Instance<E::ScalarField>,
-    input: &InputsAssignment<E::ScalarField>,
-    transcript: &mut PoseidonTranscript<E::ScalarField>,
-    gens: &NIZKGens<E>,
-    poseidon: PoseidonConfig<E::ScalarField>,
-  ) -> Result<(u128, u128, u128), ProofVerifyError> {
-    let timer_verify = Timer::new("NIZK::verify");
-
-    // transcript.append_protocol_name(NIZK::protocol_name());
-    transcript.append_bytes(b"", &inst.digest);
-
-    // We send evaluations of A, B, C at r = (rx, ry) as claims
-    // to enable the verifier complete the first sum-check
-    let timer_eval = Timer::new("eval_sparse_polys");
-    let (claimed_rx, claimed_ry) = &self.r;
-    let inst_evals = inst.inst.evaluate(claimed_rx, claimed_ry);
-    timer_eval.stop();
-
-    let timer_sat_proof = Timer::new("verify_sat_proof");
-    assert_eq!(input.assignment.len(), inst.inst.get_num_inputs());
-    // let (rx, ry) =
-    let (ds, dp, dv) = self.r1cs_sat_proof.verify_groth16(
-      inst.inst.get_num_vars(),
-      inst.inst.get_num_cons(),
-      &input.assignment,
-      &inst_evals,
-      transcript,
-      &gens.gens_r1cs_sat,
-      poseidon,
-    )?;
-
-    // verify if claimed rx and ry are correct
-    // assert_eq!(rx, *claimed_rx);
-    // assert_eq!(ry, *claimed_ry);
-    timer_sat_proof.stop();
-    timer_verify.stop();
-
-    Ok((ds, dp, dv))
-  }
-}
-
 #[inline]
 pub(crate) fn dot_product<F: PrimeField>(a: &[F], b: &[F]) -> F {
   let mut res = F::zero();
@@ -673,153 +292,10 @@ pub(crate) fn dot_product<F: PrimeField>(a: &[F], b: &[F]) -> F {
 
 #[cfg(test)]
 mod tests {
-  use crate::parameters::{poseidon_params, PoseidonConfiguration};
 
   use super::*;
-  use crate::ark_std::Zero;
-  use ark_bls12_381::Bls12_381;
-  use ark_ff::{BigInteger, One, PrimeField};
 
-  #[test]
-  fn check_snark_mixed() {
-    type E1 = ark_bls12_381::Bls12_381;
-    type E2 = ark_blst::Bls12;
-    type F1 = ark_bls12_381::Fr;
-    type F2 = ark_blst::Scalar;
-    type P1 = ark_bls12_381::G1Projective;
-    type P2 = ark_blst::G1Projective;
-
-    let num_vars = 256;
-    let num_cons = num_vars;
-    let num_inputs = 10;
-
-    // produce public generators
-    let gens = SNARKGens::<E1>::new(num_cons, num_vars, num_inputs, num_cons);
-
-    // produce a synthetic R1CSInstance
-    let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
-
-    // create a commitment to R1CSInstance
-    let (comm, decomm) = SNARK::encode(&inst, &gens);
-
-    let params = F1::poseidon_params();
-
-    // produce a proof
-    let mut prover_transcript = PoseidonTranscript::new(&params);
-    let proof = SNARK::prove(
-      &inst,
-      &comm,
-      &decomm,
-      vars,
-      &inputs,
-      &gens,
-      &mut prover_transcript,
-    );
-
-    println!(" VERIFYING WITH ARKWORKS BLS12_381");
-    let mut verifier_transcript = PoseidonTranscript::new(&F1::poseidon_params());
-    assert!(proof
-      .verify(
-        &comm,
-        &inputs,
-        &mut verifier_transcript,
-        &gens,
-        F1::poseidon_params()
-      )
-      .is_ok());
-
-    println!(" VERIFYING WITH BLST");
-    let mut proof_buffer = Vec::new();
-    proof
-      .serialize_compressed(&mut proof_buffer)
-      .expect("invalid serial");
-    let blst_proof = SNARK::<E2>::deserialize_compressed(&proof_buffer[..]).unwrap();
-
-    let mut comm_buffer = Vec::new();
-    comm
-      .serialize_compressed(&mut comm_buffer)
-      .expect("invalid serial");
-    let blst_comm = ComputationCommitment::<P2>::deserialize_compressed(&comm_buffer[..]).unwrap();
-
-    let mut inputs_buffer = Vec::new();
-    inputs
-      .serialize_compressed(&mut inputs_buffer)
-      .expect("invalid serial");
-    let blst_inputs = Assignment::<F2>::deserialize_compressed(&inputs_buffer[..]).unwrap();
-
-    let mut gens_buffer = Vec::new();
-    gens
-      .serialize_compressed(&mut gens_buffer)
-      .expect("invalid serial");
-    let blst_gens = SNARKGens::<E2>::deserialize_compressed(&gens_buffer[..]).unwrap();
-    // verify the proof
-    let mut verifier_transcript = PoseidonTranscript::new(&F2::poseidon_params());
-
-    assert!(blst_proof
-      .verify(
-        &blst_comm,
-        &blst_inputs,
-        &mut verifier_transcript,
-        &blst_gens,
-        F2::poseidon_params()
-      )
-      .is_ok());
-  }
-
-  #[test]
-  fn check_snark_arkworks_bls12_381() {
-    check_snark::<Bls12_381>();
-  }
-
-  #[test]
-  fn check_snark_arkworks_blst() {
-    check_snark::<ark_blst::Bls12>();
-  }
-
-  pub fn check_snark<E>()
-  where
-    E: Pairing,
-    E::ScalarField: PoseidonConfiguration + Absorb,
-  {
-    let num_vars = 256;
-    let num_cons = num_vars;
-    let num_inputs = 10;
-
-    // produce public generators
-    let gens = SNARKGens::<E>::new(num_cons, num_vars, num_inputs, num_cons);
-
-    // produce a synthetic R1CSInstance
-    let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
-
-    // create a commitment to R1CSInstance
-    let (comm, decomm) = SNARK::encode(&inst, &gens);
-
-    let params = E::ScalarField::poseidon_params();
-
-    // produce a proof
-    let mut prover_transcript = PoseidonTranscript::new(&params);
-    let proof = SNARK::prove(
-      &inst,
-      &comm,
-      &decomm,
-      vars,
-      &inputs,
-      &gens,
-      &mut prover_transcript,
-    );
-
-    // verify the proof
-    let mut verifier_transcript = PoseidonTranscript::new(&params);
-    assert!(proof
-      .verify(
-        &comm,
-        &inputs,
-        &mut verifier_transcript,
-        &gens,
-        E::ScalarField::poseidon_params()
-      )
-      .is_ok());
-  }
+  type F = ark_bls12_377::Fr;
 
   type E = ark_bls12_377::Bls12_377;
   type F = ark_bls12_377::Fr;
@@ -866,108 +342,5 @@ mod tests {
     let inst = Instance::<F>::new(num_cons, num_vars, num_inputs, &A, &B, &C);
     assert!(inst.is_err());
     assert_eq!(inst.err(), Some(R1CSError::InvalidScalar));
-  }
-  #[test]
-  fn test_padded_constraints() {
-    // parameters of the R1CS instance
-    let num_cons = 1;
-    let num_vars = 0;
-    let num_inputs = 3;
-    let num_non_zero_entries = 3;
-
-    // We will encode the above constraints into three matrices, where
-    // the coefficients in the matrix are in the little-endian byte order
-    let mut A: Vec<(usize, usize, Vec<u8>)> = Vec::new();
-    let mut B: Vec<(usize, usize, Vec<u8>)> = Vec::new();
-    let mut C: Vec<(usize, usize, Vec<u8>)> = Vec::new();
-
-    // Create a^2 + b + 13
-    A.push((0, num_vars + 2, (F::one().into_bigint().to_bytes_le()))); // 1*a
-    B.push((0, num_vars + 2, F::one().into_bigint().to_bytes_le())); // 1*a
-    C.push((0, num_vars + 1, F::one().into_bigint().to_bytes_le())); // 1*z
-    C.push((0, num_vars, (-F::from(13u64)).into_bigint().to_bytes_le())); // -13*1
-    C.push((0, num_vars + 3, (-F::one()).into_bigint().to_bytes_le())); // -1*b
-
-    // Var Assignments (Z_0 = 16 is the only output)
-    let vars = vec![F::zero().into_bigint().to_bytes_le(); num_vars];
-
-    // create an InputsAssignment (a = 1, b = 2)
-    let mut inputs = vec![F::zero().into_bigint().to_bytes_le(); num_inputs];
-    inputs[0] = F::from(16u64).into_bigint().to_bytes_le();
-    inputs[1] = F::from(1u64).into_bigint().to_bytes_le();
-    inputs[2] = F::from(2u64).into_bigint().to_bytes_le();
-
-    let assignment_inputs = InputsAssignment::<F>::new(&inputs).unwrap();
-    let assignment_vars = VarsAssignment::new(&vars).unwrap();
-
-    // Check if instance is satisfiable
-    let inst = Instance::new(num_cons, num_vars, num_inputs, &A, &B, &C).unwrap();
-    let res = inst.is_sat(&assignment_vars, &assignment_inputs);
-    assert!(res.unwrap(), "should be satisfied");
-
-    // SNARK public params
-    let gens = SNARKGens::<E>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
-
-    // create a commitment to the R1CS instance
-    let (comm, decomm) = SNARK::encode(&inst, &gens);
-
-    let params = poseidon_params();
-
-    // produce a SNARK
-    let mut prover_transcript = PoseidonTranscript::new(&params);
-    let proof = SNARK::prove(
-      &inst,
-      &comm,
-      &decomm,
-      assignment_vars.clone(),
-      &assignment_inputs,
-      &gens,
-      &mut prover_transcript,
-    );
-
-    // verify the SNARK
-    let mut verifier_transcript = PoseidonTranscript::new(&params);
-    assert!(proof
-      .verify(
-        &comm,
-        &assignment_inputs,
-        &mut verifier_transcript,
-        &gens,
-        poseidon_params()
-      )
-      .is_ok());
-
-    // NIZK public params
-    let gens = NIZKGens::<E>::new(num_cons, num_vars, num_inputs);
-
-    let params = poseidon_params();
-
-    // produce a NIZK
-    let mut prover_transcript = PoseidonTranscript::new(&params);
-    let proof = NIZK::prove(
-      &inst,
-      assignment_vars,
-      &assignment_inputs,
-      &gens,
-      &mut prover_transcript,
-    );
-
-    // verify the NIZK
-    let mut verifier_transcript = PoseidonTranscript::new(&params);
-    assert!(proof
-      .verify_groth16(
-        &inst,
-        &assignment_inputs,
-        &mut verifier_transcript,
-        &gens,
-        poseidon_params()
-      )
-      .is_ok());
-  }
-
-  pub fn hexprint<T: CanonicalSerialize>(s: &str, t: &T) {
-    let mut v = Vec::new();
-    t.serialize_compressed(&mut v).unwrap();
-    println!("{}: {}", s, hex::encode(v));
   }
 }
