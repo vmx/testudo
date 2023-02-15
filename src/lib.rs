@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 #![doc = include_str!("../README.md")]
-#![feature(test)]
 #![allow(clippy::assertions_on_result_states)]
 
 extern crate ark_std;
@@ -10,7 +9,6 @@ extern crate lazy_static;
 extern crate merlin;
 extern crate rand;
 extern crate sha3;
-extern crate test;
 
 #[macro_use]
 extern crate json;
