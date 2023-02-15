@@ -396,12 +396,6 @@ where
         )
       };
 
-      let mut proof_encoded: Vec<u8> = Vec::new();
-      proof
-        .serialize_with_mode(&mut proof_encoded, Compress::Yes)
-        .unwrap();
-      Timer::print(&format!("len_r1cs_sat_proof {:?}", proof_encoded.len()));
-
       (proof, rx, ry)
     };
 
@@ -434,11 +428,6 @@ where
         transcript,
       );
 
-      let mut proof_encoded: Vec<u8> = Vec::new();
-      proof
-        .serialize_with_mode(&mut proof_encoded, Compress::Yes)
-        .unwrap();
-      Timer::print(&format!("len_r1cs_eval_proof {:?}", proof_encoded.len()));
       proof
     };
 
@@ -705,7 +694,7 @@ mod tests {
     let num_inputs = 10;
 
     // produce public generators
-    let gens = SNARKGens::<E2>::new(num_cons, num_vars, num_inputs, num_cons);
+    let gens = SNARKGens::<E1>::new(num_cons, num_vars, num_inputs, num_cons);
 
     // produce a synthetic R1CSInstance
     let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
@@ -713,7 +702,7 @@ mod tests {
     // create a commitment to R1CSInstance
     let (comm, decomm) = SNARK::encode(&inst, &gens);
 
-    let params = F2::poseidon_params();
+    let params = F1::poseidon_params();
 
     // produce a proof
     let mut prover_transcript = PoseidonTranscript::new(&params);
@@ -731,34 +720,34 @@ mod tests {
     proof
       .serialize_compressed(&mut proof_buffer)
       .expect("invalid serial");
-    let blst_proof = SNARK::<E1>::deserialize_compressed(&proof_buffer[..]).unwrap();
+    let blst_proof = SNARK::<E2>::deserialize_compressed(&proof_buffer[..]).unwrap();
 
     let mut comm_buffer = Vec::new();
     comm
       .serialize_compressed(&mut comm_buffer)
       .expect("invalid serial");
-    let blst_comm = ComputationCommitment::<P1>::deserialize_compressed(&comm_buffer[..]).unwrap();
+    let blst_comm = ComputationCommitment::<P2>::deserialize_compressed(&comm_buffer[..]).unwrap();
 
     let mut inputs_buffer = Vec::new();
     inputs
       .serialize_compressed(&mut inputs_buffer)
       .expect("invalid serial");
-    let blst_inputs = Assignment::<F1>::deserialize_compressed(&inputs_buffer[..]).unwrap();
+    let blst_inputs = Assignment::<F2>::deserialize_compressed(&inputs_buffer[..]).unwrap();
 
     let mut gens_buffer = Vec::new();
     gens
       .serialize_compressed(&mut gens_buffer)
       .expect("invalid serial");
-    let blst_gens = SNARKGens::<E1>::deserialize_compressed(&gens_buffer[..]).unwrap();
+    let blst_gens = SNARKGens::<E2>::deserialize_compressed(&gens_buffer[..]).unwrap();
     // verify the proof
-    let mut verifier_transcript = PoseidonTranscript::new(&F1::poseidon_params());
+    let mut verifier_transcript = PoseidonTranscript::new(&F2::poseidon_params());
     assert!(blst_proof
       .verify(
         &blst_comm,
         &blst_inputs,
         &mut verifier_transcript,
         &blst_gens,
-        F1::poseidon_params()
+        F2::poseidon_params()
       )
       .is_ok());
   }
