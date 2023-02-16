@@ -44,18 +44,20 @@ pub mod poseidon_transcript;
 use core::cmp::max;
 use errors::R1CSError;
 
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use r1csinstance::{R1CSCommitment, R1CSDecommitment, R1CSInstance};
 
 use ark_ec::CurveGroup;
 
 /// `ComputationCommitment` holds a public preprocessed NP statement (e.g., R1CS)
-#[derive(Debug)]
+#[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
 pub struct ComputationCommitment<G: CurveGroup> {
   comm: R1CSCommitment<G>,
 }
 
 use ark_ff::PrimeField;
 /// `ComputationDecommitment` holds information to decommit `ComputationCommitment`
+#[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
 pub struct ComputationDecommitment<F: PrimeField> {
   decomm: R1CSDecommitment<F>,
 }

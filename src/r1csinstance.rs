@@ -70,6 +70,7 @@ impl<G: CurveGroup> TranscriptWriter<G::ScalarField> for R1CSCommitment<G> {
   }
 }
 
+#[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
 pub struct R1CSDecommitment<F: PrimeField> {
   dense: MultiSparseMatPolynomialAsDense<F>,
 }

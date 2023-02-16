@@ -216,6 +216,7 @@ impl<G: CurveGroup> TranscriptWriter<G::ScalarField> for DerefsCommitment<G> {
     self.comm_ops_val.write_to_transcript(transcript);
   }
 }
+#[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
 pub struct AddrTimestamps<F: PrimeField> {
   pub ops_addr_usize: Vec<Vec<usize>>,
   // 3 polys of size num_vars
@@ -280,6 +281,7 @@ impl<F: PrimeField> AddrTimestamps<F> {
   }
 }
 
+#[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
 pub struct MultiSparseMatPolynomialAsDense<F: PrimeField> {
   batch_size: usize,
   pub val: Vec<DensePolynomial<F>>,
