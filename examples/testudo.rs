@@ -29,7 +29,11 @@ fn main() {
 
   debug!("vmx: encode: start");
   let (comm, decomm) = TestudoSnark::encode(&inst, &gens);
-  debug!("vmx: encode: stop");
+  debug!(
+    "vmx: encode: stop: comm, decomm: {} {}",
+    comm.uncompressed_size(),
+    decomm.uncompressed_size()
+  );
 
   debug!("vmx: prove: start");
   let start = Instant::now();
