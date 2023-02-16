@@ -323,6 +323,15 @@ impl<F: PrimeField> R1CSInstance<F> {
       comm,
     };
 
+    println!("comb_mem {}", dense.comb_mem.len());
+    println!("comb_ops {}", dense.comb_ops.len());
+    println!("val {}", dense.val.len());
+    println!("row.ops_addr {}", dense.row.ops_addr[1].len());
+    println!("col.ops_addr {}", dense.col.ops_addr[1].len());
+    println!("row.read_ts {}", dense.row.read_ts[1].len());
+    println!("col.read_ts {}", dense.col.read_ts.len());
+    println!("audit_ts {}", dense.row.audit_ts.len());
+
     let r1cs_decomm = R1CSDecommitment { dense };
 
     (r1cs_comm, r1cs_decomm)

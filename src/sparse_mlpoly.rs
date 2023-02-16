@@ -57,7 +57,7 @@ impl<F: PrimeField> Derefs<F> {
     let derefs = {
       // combine all polynomials into a single polynomial (used below to produce a single commitment)
       let comb = DensePolynomial::merge(row_ops_val.iter().chain(col_ops_val.iter()));
-
+      println!("comb.len {}", comb.len());
       Derefs {
         row_ops_val,
         col_ops_val,
@@ -213,11 +213,14 @@ impl<G: CurveGroup> TranscriptWriter<G::ScalarField> for DerefsCommitment<G> {
     self.comm_ops_val.write_to_transcript(transcript);
   }
 }
-struct AddrTimestamps<F: PrimeField> {
-  ops_addr_usize: Vec<Vec<usize>>,
-  ops_addr: Vec<DensePolynomial<F>>,
-  read_ts: Vec<DensePolynomial<F>>,
-  audit_ts: DensePolynomial<F>,
+pub struct AddrTimestamps<F: PrimeField> {
+  pub ops_addr_usize: Vec<Vec<usize>>,
+  // 3 polys of size num_vars
+  pub ops_addr: Vec<DensePolynomial<F>>,
+  // 3 polys of size num_vars
+  pub read_ts: Vec<DensePolynomial<F>>,
+  // poly of size 2* num_vars
+  pub audit_ts: DensePolynomial<F>,
 }
 
 impl<F: PrimeField> AddrTimestamps<F> {
@@ -276,11 +279,19 @@ impl<F: PrimeField> AddrTimestamps<F> {
 
 pub struct MultiSparseMatPolynomialAsDense<F: PrimeField> {
   batch_size: usize,
-  val: Vec<DensePolynomial<F>>,
-  row: AddrTimestamps<F>,
-  col: AddrTimestamps<F>,
-  comb_ops: DensePolynomial<F>,
-  comb_mem: DensePolynomial<F>,
+  pub val: Vec<DensePolynomial<F>>,
+  // 6 polynomials of size num_vars + 1 polynomial of size 2*num_vars - idk what we do with them
+  pub row: AddrTimestamps<F>,
+  // as above
+  pub col: AddrTimestamps<F>,
+
+  // in deref function (518) we do some magic and get a polynomial of size 6*num_vars which we commit to on the prover's side
+  // we commit to this inside the prover
+
+  // 4 * num_vars -> we commit to this so would become with PST/MIPP sqrt(4*num_var)s polynomials of size sqrt(4*num_vars)- this is done in encode
+  pub comb_ops: DensePolynomial<F>,
+  // 6 * num_vars -> we commit to this so would become with PST/MIPP sqrt(6*num_vars) polynomials of size sqrt(6* num_vars) - this is done in encode
+  pub comb_mem: DensePolynomial<F>,
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
@@ -508,6 +519,8 @@ impl<F: PrimeField> MultiSparseMatPolynomialAsDense<F> {
   pub fn deref(&self, row_mem_val: &[F], col_mem_val: &[F]) -> Derefs<F> {
     let row_ops_val = self.row.deref(row_mem_val);
     let col_ops_val = self.col.deref(col_mem_val);
+    println!("row_ops_val {}", row_ops_val.len());
+    println!("cols_ops_val {}", col_ops_val.len());
 
     Derefs::new(row_ops_val, col_ops_val)
   }
@@ -1343,6 +1356,7 @@ where
   ) -> Self {
     // transcript.append_protocol_name(PolyEvalNetworkProof::protocol_name());
 
+    // no commitment here
     let (proof_prod_layer, rand_mem, rand_ops) = ProductLayerProof::prove(
       &mut network.row_layers.prod_layer,
       &mut network.col_layers.prod_layer,
@@ -1351,6 +1365,8 @@ where
       evals,
       transcript,
     );
+
+    // i think we do commitment opening of deref here, need to figure out how deref works
 
     // proof of hash layer for row and col
     let proof_hash_layer =
@@ -1479,6 +1495,7 @@ where
       (poly_rx, poly_ry)
     };
 
+    // magic
     let derefs = dense.deref(&mem_rx, &mem_ry);
 
     // commit to non-deterministic choices of the prover

@@ -1,2 +1,2 @@
 power,input_constraints,testudo_proving_time,testudo_verification_time,sat_proof_size,eval_proof_size,total_proof_size
-4,16,779,99,4048,10904,15352
+12,4096,3268,422,9872,43800,54584

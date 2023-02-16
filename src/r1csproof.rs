@@ -245,6 +245,8 @@ where
     // create the multilinear witness polynomial from the satisfying assiment
     // expressed as the list of sqrt-sized polynomials
     let mut pl = Polynomial::from_evaluations(&vars.clone());
+    println!("pl.len {}", pl.polys.len());
+    println!("one polynomial length {}", pl.polys[1].len());
 
     let timer_commit = Timer::new("polycommit");
 

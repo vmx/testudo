@@ -13,7 +13,7 @@ use crate::{
 
 pub struct Polynomial<E: Pairing> {
   m: usize,
-  polys: Vec<DensePolynomial<E::ScalarField>>,
+  pub polys: Vec<DensePolynomial<E::ScalarField>>,
   q: Option<DensePolynomial<E::ScalarField>>,
   chis_b: Option<Vec<E::ScalarField>>,
 }
