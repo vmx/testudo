@@ -290,7 +290,7 @@ pub struct SparseMatPolyCommitmentGens<E: Pairing> {
 }
 
 impl<E: Pairing> SparseMatPolyCommitmentGens<E> {
-  pub fn new(
+  pub fn setup(
     label: &'static [u8],
     num_vars_x: usize,
     num_vars_y: usize,
@@ -307,9 +307,9 @@ impl<E: Pairing> SparseMatPolyCommitmentGens<E> {
     let num_vars_derefs =
       num_nz_entries.next_power_of_two().log_2() + (batch_size * 2).next_power_of_two().log_2();
 
-    let gens_ops = PolyCommitmentGens::new(num_vars_ops, label);
-    let gens_mem = PolyCommitmentGens::new(num_vars_mem, label);
-    let gens_derefs = PolyCommitmentGens::new(num_vars_derefs, label);
+    let gens_ops = PolyCommitmentGens::setup(num_vars_ops, label);
+    let gens_mem = PolyCommitmentGens::setup(num_vars_mem, label);
+    let gens_derefs = PolyCommitmentGens::setup(num_vars_derefs, label);
     SparseMatPolyCommitmentGens {
       gens_ops,
       gens_mem,
@@ -1577,33 +1577,31 @@ impl<F: PrimeField> SparsePolynomial<F> {
     SparsePolynomial { num_vars, Z }
   }
 
-  // TF IS THIS??
+  // fn compute_chi(a: &[bool], r: &[F]) -> F {
+  //   assert_eq!(a.len(), r.len());
+  //   let mut chi_i = F::one();
+  //   for j in 0..r.len() {
+  //     if a[j] {
+  //       chi_i *= r[j];
+  //     } else {
+  //       chi_i *= F::one() - r[j];
+  //     }
+  //   }
+  //   chi_i
+  // }
 
-  fn compute_chi(a: &[bool], r: &[F]) -> F {
-    assert_eq!(a.len(), r.len());
-    let mut chi_i = F::one();
-    for j in 0..r.len() {
-      if a[j] {
-        chi_i *= r[j];
-      } else {
-        chi_i *= F::one() - r[j];
-      }
-    }
-    chi_i
-  }
+  // // Takes O(n log n). TODO: do this in O(n) where n is the number of entries in Z
+  // pub fn evaluate(&self, r: &[F]) -> F {
+  //   assert_eq!(self.num_vars, r.len());
 
-  // Takes O(n log n). TODO: do this in O(n) where n is the number of entries in Z
-  pub fn evaluate(&self, r: &[F]) -> F {
-    assert_eq!(self.num_vars, r.len());
-
-    (0..self.Z.len())
-      .map(|i| {
-        let bits = self.Z[i].idx.get_bits(r.len());
-        println!("{:?}", bits);
-        SparsePolynomial::compute_chi(&bits, r) * self.Z[i].val
-      })
-      .sum()
-  }
+  //   (0..self.Z.len())
+  //     .map(|i| {
+  //       let bits = self.Z[i].idx.get_bits(r.len());
+  //       println!("{:?}", bits);
+  //       SparsePolynomial::compute_chi(&bits, r) * self.Z[i].val
+  //     })
+  //     .sum()
+  // }
 }
 
 #[cfg(test)]
@@ -1637,7 +1635,7 @@ mod tests {
     }
 
     let poly_M = SparseMatPolynomial::new(num_vars_x, num_vars_y, M);
-    let gens = SparseMatPolyCommitmentGens::<E>::new(
+    let gens = SparseMatPolyCommitmentGens::<E>::setup(
       b"gens_sparse_poly",
       num_vars_x,
       num_vars_y,

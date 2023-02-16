@@ -7,7 +7,7 @@ use super::sparse_mlpoly::{
 };
 use super::timer::Timer;
 use crate::poseidon_transcript::{PoseidonTranscript, TranscriptWriter};
-use crate::transcript::Transcript;
+
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
@@ -31,7 +31,7 @@ pub struct R1CSCommitmentGens<E: Pairing> {
 }
 
 impl<E: Pairing> R1CSCommitmentGens<E> {
-  pub fn new(
+  pub fn setup(
     label: &'static [u8],
     num_cons: usize,
     num_vars: usize,
@@ -41,8 +41,13 @@ impl<E: Pairing> R1CSCommitmentGens<E> {
     assert!(num_inputs < num_vars);
     let num_poly_vars_x = num_cons.log_2();
     let num_poly_vars_y = (2 * num_vars).log_2();
-    let gens =
-      SparseMatPolyCommitmentGens::new(label, num_poly_vars_x, num_poly_vars_y, num_nz_entries, 3);
+    let gens = SparseMatPolyCommitmentGens::setup(
+      label,
+      num_poly_vars_x,
+      num_poly_vars_y,
+      num_nz_entries,
+      3,
+    );
     R1CSCommitmentGens { gens }
   }
 }
