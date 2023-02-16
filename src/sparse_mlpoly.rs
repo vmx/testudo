@@ -290,7 +290,7 @@ pub struct SparseMatPolyCommitmentGens<E: Pairing> {
 }
 
 impl<E: Pairing> SparseMatPolyCommitmentGens<E> {
-  pub fn new(
+  pub fn setup(
     label: &'static [u8],
     num_vars_x: usize,
     num_vars_y: usize,
@@ -307,9 +307,9 @@ impl<E: Pairing> SparseMatPolyCommitmentGens<E> {
     let num_vars_derefs =
       num_nz_entries.next_power_of_two().log_2() + (batch_size * 2).next_power_of_two().log_2();
 
-    let gens_ops = PolyCommitmentGens::new(num_vars_ops, label);
-    let gens_mem = PolyCommitmentGens::new(num_vars_mem, label);
-    let gens_derefs = PolyCommitmentGens::new(num_vars_derefs, label);
+    let gens_ops = PolyCommitmentGens::setup(num_vars_ops, label);
+    let gens_mem = PolyCommitmentGens::setup(num_vars_mem, label);
+    let gens_derefs = PolyCommitmentGens::setup(num_vars_derefs, label);
     SparseMatPolyCommitmentGens {
       gens_ops,
       gens_mem,
@@ -1635,7 +1635,7 @@ mod tests {
     }
 
     let poly_M = SparseMatPolynomial::new(num_vars_x, num_vars_y, M);
-    let gens = SparseMatPolyCommitmentGens::<E>::new(
+    let gens = SparseMatPolyCommitmentGens::<E>::setup(
       b"gens_sparse_poly",
       num_vars_x,
       num_vars_y,

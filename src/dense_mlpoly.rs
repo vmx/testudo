@@ -182,7 +182,7 @@ pub struct PolyCommitmentGens<E: Pairing> {
 impl<E: Pairing> PolyCommitmentGens<E> {
   // num vars is the number of variables in the multilinear polynomial
   // this gives the maximum degree bound
-  pub fn new(num_vars: usize, label: &'static [u8]) -> PolyCommitmentGens<E> {
+  pub fn setup(num_vars: usize, label: &'static [u8]) -> PolyCommitmentGens<E> {
     let (_left, right) = EqPolynomial::<E::ScalarField>::compute_factored_lens(num_vars);
     let gens = DotProductProofGens::new(right.pow2(), label);
 
@@ -743,7 +743,7 @@ mod tests {
     let eval = poly.evaluate(&r);
     assert_eq!(eval, F::from(28));
 
-    let gens = PolyCommitmentGens::new(poly.get_num_vars(), b"test-two");
+    let gens = PolyCommitmentGens::setup(poly.get_num_vars(), b"test-two");
     let (poly_commitment, blinds) = poly.commit(&gens, false);
 
     let params = poseidon_params();
