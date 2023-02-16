@@ -65,7 +65,8 @@ where
       Instance::<E::ScalarField>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
     let mut prover_transcript = PoseidonTranscript::new(&params.clone());
 
-    let gens = TestudoSnarkGens::<E>::new(num_cons, num_vars, num_inputs, num_cons, params.clone());
+    let gens =
+      TestudoSnarkGens::<E>::setup(num_cons, num_vars, num_inputs, num_cons, params.clone());
 
     let (comm, decomm) = TestudoSnark::<E>::encode(&inst, &gens);
 

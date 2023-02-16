@@ -45,7 +45,8 @@ where
       Instance::<E::ScalarField>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
 
     // produce public generators
-    let gens = TestudoSnarkGens::<E>::new(num_cons, num_vars, num_inputs, num_cons, params.clone());
+    let gens =
+      TestudoSnarkGens::<E>::setup(num_cons, num_vars, num_inputs, num_cons, params.clone());
 
     // create a commitment to R1CSInstance
     let (comm, decomm) = TestudoSnark::encode(&inst, &gens);

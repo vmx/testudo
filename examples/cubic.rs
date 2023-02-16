@@ -130,7 +130,7 @@ fn main() {
   let params = poseidon_params();
 
   // produce public parameters
-  let gens = TestudoSnarkGens::<E>::new(
+  let gens = TestudoSnarkGens::<E>::setup(
     num_cons,
     num_vars,
     num_inputs,

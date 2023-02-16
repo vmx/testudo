@@ -74,7 +74,10 @@ impl<E> CircuitGens<E>
 where
   E: Pairing,
 {
-  pub fn new(
+  // Performs the circuit-specific setup required by Groth16 for the sumcheck
+  // circuit. This is done by filling the struct with dummy elements, ensuring
+  // the sizes are correct so the setup matches the circuit that will be proved.
+  pub fn setup(
     num_cons: usize,
     num_vars: usize,
     num_inputs: usize,
@@ -152,7 +155,8 @@ pub struct R1CSGens<E: Pairing> {
 }
 
 impl<E: Pairing> R1CSGens<E> {
-  pub fn new(
+  // Performs the setup for the polynomial commitment PST and for Groth16.
+  pub fn setup(
     label: &'static [u8],
     num_cons: usize,
     num_vars: usize,
@@ -160,8 +164,8 @@ impl<E: Pairing> R1CSGens<E> {
     poseidon: PoseidonConfig<E::ScalarField>,
   ) -> Self {
     let num_poly_vars = num_vars.log_2();
-    let gens_pc = PolyCommitmentGens::new(num_poly_vars, label);
-    let gens_gc = CircuitGens::new(num_cons, num_vars, num_inputs, poseidon);
+    let gens_pc = PolyCommitmentGens::setup(num_poly_vars, label);
+    let gens_gc = CircuitGens::setup(num_cons, num_vars, num_inputs, poseidon);
     R1CSGens { gens_pc, gens_gc }
   }
 }
@@ -225,6 +229,8 @@ where
     (sc_proof_phase_two, r, claims)
   }
 
+  // Proves the R1CS instance inst is satisfiable given the assignment
+  // vars.
   pub fn prove(
     inst: &R1CSInstance<E::ScalarField>,
     vars: Vec<E::ScalarField>,
@@ -247,7 +253,6 @@ where
 
     transcript.append_gt::<E>(b"", &t);
 
-    // comm.write_to_transcript(transcript);
     timer_commit.stop();
 
     let initial_state = transcript.challenge_scalar(b"");
@@ -330,9 +335,6 @@ where
     let transcript_sat_state = transcript.challenge_scalar(b"");
     transcript.new_from_state(&transcript_sat_state);
 
-    // TODO: modify the polynomial evaluation in Spartan to be consistent
-    // with the evaluation in ark-poly-commit so that reversing is not needed
-    // anymore
     let timmer_opening = Timer::new("polyopening");
 
     let (comm, proof_eval_vars_at_ry, mipp_proof) =
@@ -364,6 +366,8 @@ where
     )
   }
 
+  // Creates a Groth16 proof for the verification of sumcheck, expressed
+  // as a circuit.
   pub fn prove_verifier(
     &self,
     num_vars: usize,
@@ -431,6 +435,8 @@ impl<E: Pairing> R1CSVerifierProof<E>
 where
   <E as Pairing>::ScalarField: Absorb,
 {
+  // Verifier the Groth16 proof for the sumcheck circuit and the PST polynomial
+  // commitment opening.
   pub fn verify(
     &self,
     input: &[E::ScalarField],
@@ -583,7 +589,7 @@ mod tests {
     let (inst, vars, input) =
       R1CSInstance::<P::ScalarField>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
 
-    let gens = R1CSGens::<P>::new(b"test-m", num_cons, num_vars, num_inputs, params.clone());
+    let gens = R1CSGens::<P>::setup(b"test-m", num_cons, num_vars, num_inputs, params.clone());
 
     //let params = poseidon_params();
     // let mut random_tape = RandomTape::new(b"proof");
@@ -612,8 +618,5 @@ mod tests {
     assert!(verifer_proof
       .verify(&input, &inst_evals, &mut verifier_transcript, &gens)
       .is_ok());
-
-    // if you want to check the test fails
-    // input[0] = Scalar::zero();
   }
 }

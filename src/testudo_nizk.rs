@@ -25,9 +25,8 @@ pub struct TestudoNizkGens<E: Pairing> {
 }
 
 impl<E: Pairing> TestudoNizkGens<E> {
-  /// Constructs a new `TestudoNizkGens` given the size of the R1CS statement
-  /// `num_nz_entries` specifies the maximum number of non-zero entries in any of the three R1CS matrices
-  pub fn new(
+  /// Performs the setup required  by the polynomial commitment PST and Groth16
+  pub fn setup(
     num_cons: usize,
     num_vars: usize,
     num_inputs: usize,
@@ -57,7 +56,7 @@ impl<E: Pairing> TestudoNizkGens<E> {
       num_cons_padded
     };
 
-    let gens_r1cs_sat = R1CSGens::new(
+    let gens_r1cs_sat = R1CSGens::setup(
       b"gens_r1cs_sat",
       num_cons_padded,
       num_vars_padded,
@@ -72,9 +71,7 @@ impl<E: Pairing> TestudoNizk<E>
 where
   E::ScalarField: Absorb,
 {
-  // Returns the Testudo SNARK proof which has two components:
-  // * proof that the R1CS instance is satisfiable
-  // * proof that the evlauation of matrices A, B and C on (x,y) are correct
+  // Returns a proof that the R1CS instance is satisfiable
   pub fn prove(
     inst: &Instance<E::ScalarField>,
     vars: VarsAssignment<E::ScalarField>,
@@ -127,8 +124,10 @@ where
     })
   }
 
-  // Verifies the Testudo SNARK proof  ensuring the satisfiability of an R1CS
-  // instance
+  // Verifies the satisfiability proof for the R1CS instance. In NIZK mode, the
+  // verifier evaluates matrices A, B and C themselves, which is a linear
+  // operation and hence this is not a SNARK. 
+  // However, for highly structured circuits this operation is fast.
   pub fn verify(
     &self,
     gens: &TestudoNizkGens<E>,
@@ -170,7 +169,7 @@ mod tests {
     type E = ark_bls12_377::Bls12_377;
 
     // produce public generators
-    let gens = TestudoNizkGens::<E>::new(num_cons, num_vars, num_inputs, poseidon_params());
+    let gens = TestudoNizkGens::<E>::setup(num_cons, num_vars, num_inputs, poseidon_params());
 
     // produce a synthetic R1CSInstance
     let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);

@@ -24,7 +24,7 @@ ark-std = { version = "^0.4.0"}
 ark-bls12-377 = { version = "^0.4.0", features = ["r1cs","curve"] }
 ark-bls12-381 = { version = "^0.4.0", features = ["curve"] }
 ark-blst = { git = "https://github.com/nikkolasg/ark-blst"  }
-ark-serialize = { version = "^0.4.0", features = ["derive"] }
+ark-serialize = { version = "^0.4.0"}
 ark-crypto-primitives = {version = "^0.4.0", features = ["sponge","r1cs","snark"] }
 ark-r1cs-std = { version = "^0.4.0", default-features = false }
 ark-relations = { version = "^0.4.0", default-features = false, optional = true }
@@ -78,4 +78,4 @@ ark-groth16 = { git = "https://github.com/arkworks-rs/groth16" }
 blstrs = { git = "https://github.com/nikkolasg/blstrs", branch = "feat/arkwork" }
 ark-ec = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
 ark-ff = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
-ark-serialize = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned", features= ["derive"] }
+ark-serialize = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }

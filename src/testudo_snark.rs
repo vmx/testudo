@@ -33,9 +33,11 @@ pub struct TestudoSnarkGens<E: Pairing> {
 }
 
 impl<E: Pairing> TestudoSnarkGens<E> {
-  /// Constructs a new `TestudoSnarkGens` given the size of the R1CS statement
-  /// `num_nz_entries` specifies the maximum number of non-zero entries in any of the three R1CS matrices
-  pub fn new(
+  /// Performs the setups required by the polynomial commitment PST, Groth16
+  /// and the computational commitment given the size of the R1CS statement,
+  /// `num_nz_entries` specifies the maximum number of non-zero entries in
+  ///  any of the three R1CS matrices.
+  pub fn setup(
     num_cons: usize,
     num_vars: usize,
     num_inputs: usize,
@@ -66,14 +68,14 @@ impl<E: Pairing> TestudoSnarkGens<E> {
       num_cons_padded
     };
 
-    let gens_r1cs_sat = R1CSGens::new(
+    let gens_r1cs_sat = R1CSGens::setup(
       b"gens_r1cs_sat",
       num_cons_padded,
       num_vars_padded,
       num_inputs,
       poseidon,
     );
-    let gens_r1cs_eval = R1CSCommitmentGens::new(
+    let gens_r1cs_eval = R1CSCommitmentGens::setup(
       b"gens_r1cs_eval",
       num_cons_padded,
       num_vars_padded,
@@ -91,9 +93,9 @@ impl<E: Pairing> TestudoSnark<E>
 where
   E::ScalarField: Absorb,
 {
-  // Constructs the computational commitment, required to prove that the
+  // Constructs the computational commitment, used to prove that the
   // evaluations of matrices A, B and C sent by the prover to the verifier
-  // in the SNARK are correct.
+  // are correct.
   pub fn encode(
     inst: &Instance<E::ScalarField>,
     gens: &TestudoSnarkGens<E>,
@@ -112,7 +114,8 @@ where
 
   // Returns the Testudo SNARK proof which has two components:
   // * proof that the R1CS instance is satisfiable
-  // * proof that the evlauation of matrices A, B and C on (x,y) are correct
+  // * proof that the evlauation of matrices A, B and C on point (x,y)
+  // resulted from the two rounda of sumcheck are correct
   pub fn prove(
     inst: &Instance<E::ScalarField>,
     comm: &ComputationCommitment<E::G1>,
@@ -251,7 +254,7 @@ mod tests {
 
     // produce public generators
     let gens =
-      TestudoSnarkGens::<E>::new(num_cons, num_vars, num_inputs, num_cons, poseidon_params());
+      TestudoSnarkGens::<E>::setup(num_cons, num_vars, num_inputs, num_cons, poseidon_params());
 
     // produce a synthetic R1CSInstance
     let (inst, vars, inputs) = Instance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
@@ -329,7 +332,7 @@ mod tests {
     assert!(res.unwrap(), "should be satisfied");
 
     // Testudo public params
-    let gens = TestudoSnarkGens::<E>::new(
+    let gens = TestudoSnarkGens::<E>::setup(
       num_cons,
       num_vars,
       num_inputs,
