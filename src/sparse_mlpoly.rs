@@ -18,6 +18,7 @@ use ark_ff::PrimeField;
 use ark_ff::{Field, One, Zero};
 use ark_serialize::*;
 use core::cmp::Ordering;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct SparseMatEntry<F: PrimeField> {
@@ -569,6 +570,7 @@ impl<F: PrimeField> Layers<F> {
     println!("vmx: sparse mpoly: num_mem_cells: {}", num_mem_cells);
     let poly_init_hashed = DensePolynomial::new(
       (0..num_mem_cells)
+        .into_par_iter()
         .map(|i| {
           // at init time, addr is given by i, init value is given by eval_table, and ts = 0
           hash_func(&F::from(i as u64), &eval_table[i], &F::zero()) - r_multiset_check
@@ -577,6 +579,7 @@ impl<F: PrimeField> Layers<F> {
     );
     let poly_audit_hashed = DensePolynomial::new(
       (0..num_mem_cells)
+        .into_par_iter()
         .map(|i| {
           // at audit time, addr is given by i, value is given by eval_table, and ts is given by audit_ts
           hash_func(&F::from(i as u64), &eval_table[i], &audit_ts[i]) - r_multiset_check
@@ -588,6 +591,7 @@ impl<F: PrimeField> Layers<F> {
     let mut poly_read_hashed_vec: Vec<DensePolynomial<F>> = Vec::new();
     let mut poly_write_hashed_vec: Vec<DensePolynomial<F>> = Vec::new();
     println!("vmx: sparse mpoly: addrs_vec len: {}", addrs_vec.len());
+    println!("vmx: sparse mpoly: addrs len: {}", addrs_vec[0].len());
     for i in 0..addrs_vec.len() {
       let (addrs, derefs, read_ts) = (&addrs_vec[i], &derefs_vec[i], &read_ts_vec[i]);
       assert_eq!(addrs.len(), derefs.len());
@@ -595,6 +599,7 @@ impl<F: PrimeField> Layers<F> {
       let num_ops = addrs.len();
       let poly_read_hashed = DensePolynomial::new(
         (0..num_ops)
+          .into_par_iter()
           .map(|i| {
             // at read time, addr is given by addrs, value is given by derefs, and ts is given by read_ts
             hash_func(&addrs[i], &derefs[i], &read_ts[i]) - r_multiset_check
@@ -605,6 +610,7 @@ impl<F: PrimeField> Layers<F> {
 
       let poly_write_hashed = DensePolynomial::new(
         (0..num_ops)
+          .into_par_iter()
           .map(|i| {
             // at write time, addr is given by addrs, value is given by derefs, and ts is given by write_ts = read_ts + 1
             hash_func(&addrs[i], &derefs[i], &(read_ts[i] + F::one())) - r_multiset_check
