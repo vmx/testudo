@@ -318,7 +318,7 @@ impl<F: PrimeField> DensePolynomial<F> {
     let R_size = self.Z.len() / L_size;
     assert_eq!(L_size * R_size, self.Z.len());
     let C = (0..L_size)
-      .into_iter()
+      .into_par_iter()
       .map(|i| {
         let slice = &self.Z[R_size * i..R_size * (i + 1)];
         PedersenCommit::commit_slice(slice, &blinds[i], gens).into_affine()
