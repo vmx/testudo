@@ -72,6 +72,7 @@ impl<F: PrimeField> Derefs<F> {
   where
     E: Pairing<ScalarField = F>,
   {
+    println!("HEREEE self.comb.len {}", self.comb.len());
     let (comm_ops_val, _blinds) = self.comb.commit(gens, false);
     DerefsCommitment { comm_ops_val }
   }
@@ -117,6 +118,7 @@ where
     };
     // decommit the joint polynomial at r_joint
     transcript.append_scalar(b"", &eval_joint);
+    let derefs_proof_timer = Timer::new("deref_proof");
     let (proof_derefs, _comm_derefs_eval) = PolyEvalProof::prove(
       joint_poly,
       None,
@@ -126,6 +128,7 @@ where
       gens,
       transcript,
     );
+    derefs_proof_timer.stop();
 
     proof_derefs
   }
@@ -790,6 +793,7 @@ where
     r_joint_ops.extend(rand_ops);
     debug_assert_eq!(dense.comb_ops.evaluate(&r_joint_ops), joint_claim_eval_ops);
     transcript.append_scalar(b"", &joint_claim_eval_ops);
+    let ops_proof_timer = Timer::new("ops_proof");
     let (proof_ops, _comm_ops_eval) = PolyEvalProof::prove(
       &dense.comb_ops,
       None,
@@ -799,6 +803,7 @@ where
       &gens.gens_ops,
       transcript,
     );
+    ops_proof_timer.stop();
 
     // form a single decommitment using comb_comb_mem at rand_mem
     let evals_mem: Vec<E::ScalarField> = vec![eval_row_audit_ts, eval_col_audit_ts];
@@ -816,6 +821,7 @@ where
     r_joint_mem.extend(rand_mem);
     debug_assert_eq!(dense.comb_mem.evaluate(&r_joint_mem), joint_claim_eval_mem);
     transcript.append_scalar(b"", &joint_claim_eval_mem);
+    let mem_proof_timer = Timer::new("mem_proof");
     let (proof_mem, _comm_mem_eval) = PolyEvalProof::prove(
       &dense.comb_mem,
       None,
@@ -825,6 +831,7 @@ where
       &gens.gens_mem,
       transcript,
     );
+    mem_proof_timer.stop();
 
     HashLayerProof {
       eval_row: (eval_row_addr_vec, eval_row_read_ts_vec, eval_row_audit_ts),
@@ -1501,7 +1508,9 @@ where
     // commit to non-deterministic choices of the prover
     let timer_commit = Timer::new("commit_nondet_witness");
     let comm_derefs = {
+      let timer_actual_commit = Timer::new("actual_commit");
       let comm = derefs.commit(&gens.gens_derefs);
+      timer_actual_commit.stop();
       comm.write_to_transcript(transcript);
       comm
     };
