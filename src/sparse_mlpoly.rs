@@ -566,6 +566,7 @@ impl<F: PrimeField> Layers<F> {
 
     // hash init and audit that does not depend on #instances
     let num_mem_cells = eval_table.len();
+    println!("vmx: sparse mpoly: num_mem_cells: {}", num_mem_cells);
     let poly_init_hashed = DensePolynomial::new(
       (0..num_mem_cells)
         .map(|i| {
@@ -586,6 +587,7 @@ impl<F: PrimeField> Layers<F> {
     // hash read and write that depends on #instances
     let mut poly_read_hashed_vec: Vec<DensePolynomial<F>> = Vec::new();
     let mut poly_write_hashed_vec: Vec<DensePolynomial<F>> = Vec::new();
+    println!("vmx: sparse mpoly: addrs_vec len: {}", addrs_vec.len());
     for i in 0..addrs_vec.len() {
       let (addrs, derefs, read_ts) = (&addrs_vec[i], &derefs_vec[i], &read_ts_vec[i]);
       assert_eq!(addrs.len(), derefs.len());
