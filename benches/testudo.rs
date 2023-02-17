@@ -69,16 +69,16 @@ where
     let gens =
       TestudoSnarkGens::<E>::setup(num_cons, num_vars, num_inputs, num_cons, params.clone());
 
-    let comm_path = "/tmp/testudo.comm";
-    let decomm_path = "/tmp/testudo.decomm";
+    let comm_path = format!("/tmp/testudo_{}.comm", s);
+    let decomm_path = format!("/tmp/testudo_{}.decomm", s);
     let (comm, decomm) = match Path::new(&comm_path).try_exists() {
       Ok(false) => {
         println!("vmx: comm file doesn't exist yet, generate comm/decomm");
         let (comm, decomm) = TestudoSnark::<E>::encode(&inst, &gens);
-        let comm_file = File::create(comm_path).unwrap();
+        let comm_file = File::create(&comm_path).unwrap();
         println!("vmx: writing comm at {}", comm_path);
         comm.serialize_uncompressed(comm_file).unwrap();
-        let decomm_file = File::create(decomm_path).unwrap();
+        let decomm_file = File::create(&decomm_path).unwrap();
         println!("vmx: writing decomm at {}", decomm_path);
         decomm.serialize_uncompressed(decomm_file).unwrap();
         (comm, decomm)
