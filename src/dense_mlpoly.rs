@@ -13,13 +13,10 @@ use ark_poly::MultilinearExtension;
 use ark_poly_commit::multilinear_pc::data_structures::{CommitterKey, VerifierKey};
 use ark_poly_commit::multilinear_pc::MultilinearPC;
 use ark_serialize::*;
-use ark_std::One;
 use core::ops::Index;
-use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
-
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
-
+use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 // TODO: integrate the DenseMultilinearExtension(and Sparse) https://github.com/arkworks-rs/algebra/tree/master/poly/src/evaluations/multivariate/multilinear from arkworks into Spartan. This requires moving the specific Spartan functionalities in separate traits.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, CanonicalDeserialize, CanonicalSerialize)]
 pub struct DensePolynomial<F: PrimeField> {
@@ -185,7 +182,7 @@ pub struct PolyCommitmentGens<E: Pairing> {
 impl<E: Pairing> PolyCommitmentGens<E> {
   // num vars is the number of variables in the multilinear polynomial
   // this gives the maximum degree bound
-  pub fn new(num_vars: usize, label: &'static [u8]) -> PolyCommitmentGens<E> {
+  pub fn setup(num_vars: usize, label: &'static [u8]) -> PolyCommitmentGens<E> {
     let (_left, right) = EqPolynomial::<E::ScalarField>::compute_factored_lens(num_vars);
     let gens = DotProductProofGens::new(right.pow2(), label);
 
@@ -577,7 +574,7 @@ where
 
 #[cfg(test)]
 mod tests {
-
+  use crate::ark_std::One;
   use crate::parameters::poseidon_params;
 
   use super::*;
@@ -746,7 +743,7 @@ mod tests {
     let eval = poly.evaluate(&r);
     assert_eq!(eval, F::from(28));
 
-    let gens = PolyCommitmentGens::new(poly.get_num_vars(), b"test-two");
+    let gens = PolyCommitmentGens::setup(poly.get_num_vars(), b"test-two");
     let (poly_commitment, blinds) = poly.commit(&gens, false);
 
     let params = poseidon_params();

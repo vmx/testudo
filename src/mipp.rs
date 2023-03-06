@@ -118,7 +118,6 @@ impl<E: Pairing> MippProof<E> {
       xs.push(c);
       xs_inv.push(c_inv);
     }
-
     assert!(m_a.len() == 1 && m_y.len() == 1 && m_h.len() == 1);
 
     let final_a = m_a[0];
@@ -222,6 +221,7 @@ impl<E: Pairing> MippProof<E> {
       // doesn't bring much improvement
       final_y *= E::ScalarField::one() + c_inv.mul(point[i]) - point[i];
     }
+
     // First, each entry of T and U are multiplied independently by their
     // respective challenges which is done in parralel and, at the end,
     // the results are merged together for each vector following their
@@ -294,14 +294,16 @@ impl<E: Pairing> MippProof<E> {
     // a PST verification at the random point rs, given the pst proof
     // received from the prover prover
     let check_h = MultilinearPC::<E>::check_2(vk, &comm_h, &rs, v, &proof.pst_proof_h);
+    assert!(check_h == true);
 
     let final_u = proof.final_a.mul(final_y);
     let final_t: <E as Pairing>::TargetField = E::pairing(proof.final_a, proof.final_h).0;
 
     let check_t = ref_final_res.tc == final_t;
+    assert!(check_t == true);
 
     let check_u = ref_final_res.uc == final_u;
-
+    assert!(check_u == true);
     check_h & check_u & check_t
   }
 }
@@ -389,21 +391,20 @@ pub enum Error {
   #[error("Serialization error: {0}")]
   Serialization(#[from] SerializationError),
 
-  #[error("Commitment key length invalid")]
-  InvalidKeyLength,
-
   #[error("Vectors length do not match for inner product (IP)")]
   InvalidIPVectorLength,
+  // #[error("Commitment key length invalid")]
+  // InvalidKeyLength,
 
-  #[error("Invalid pairing result")]
-  InvalidPairing,
+  // #[error("Invalid pairing result")]
+  // InvalidPairing,
 
-  #[error("Invalid SRS: {0}")]
-  InvalidSRS(String),
+  // #[error("Invalid SRS: {0}")]
+  // InvalidSRS(String),
 
-  #[error("Invalid proof: {0}")]
-  InvalidProof(String),
+  // #[error("Invalid proof: {0}")]
+  // InvalidProof(String),
 
-  #[error("Malformed Groth16 verifying key")]
-  MalformedVerifyingKey,
+  // #[error("Malformed Groth16 verifying key")]
+  // MalformedVerifyingKey,
 }
