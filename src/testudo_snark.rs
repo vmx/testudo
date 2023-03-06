@@ -20,6 +20,7 @@ use ark_ec::pairing::Pairing;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+
 pub struct TestudoSnark<E: Pairing> {
   pub r1cs_verifier_proof: R1CSVerifierProof<E>,
   pub r1cs_eval_proof: R1CSEvalProof<E>,

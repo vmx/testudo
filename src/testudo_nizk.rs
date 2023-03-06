@@ -15,6 +15,11 @@ use ark_ec::pairing::Pairing;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+
+// TestudoNizk is suitable for uniform circuits where the
+// evaluation of R1CS matrices A, B and C is cheap and can
+// be done by the verifier. For more complex circuits this
+// operation has to be offloaded to the prover.
 pub struct TestudoNizk<E: Pairing> {
   pub r1cs_verifier_proof: R1CSVerifierProof<E>,
   pub r: (Vec<E::ScalarField>, Vec<E::ScalarField>),
@@ -126,7 +131,7 @@ where
 
   // Verifies the satisfiability proof for the R1CS instance. In NIZK mode, the
   // verifier evaluates matrices A, B and C themselves, which is a linear
-  // operation and hence this is not a SNARK. 
+  // operation and hence this is not a SNARK.
   // However, for highly structured circuits this operation is fast.
   pub fn verify(
     &self,
