@@ -72,7 +72,7 @@ parallel = [ "std", "ark-ff/parallel", "ark-std/parallel", "ark-ec/parallel", "a
 std = ["ark-ff/std", "ark-ec/std", "ark-std/std", "ark-relations/std", "ark-serialize/std"]
 
 [patch.crates-io]
-ark-poly-commit = {git = "https://github.com/cryptonetlab/ark-polycommit", branch="feat/pst_on_g2"}
+ark-poly-commit = {git = "https://github.com/cryptonetlab/ark-polycommit", branch="feat/variable-crs"}
 ark-groth16 = { git = "https://github.com/arkworks-rs/groth16" }
 blstrs = { git = "https://github.com/nikkolasg/blstrs", branch = "feat/arkwork" }
 ark-ec = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }

@@ -13,6 +13,7 @@ use crate::{
 
 pub struct Polynomial<E: Pairing> {
   m: usize,
+  odd: usize,
   polys: Vec<DensePolynomial<E::ScalarField>>,
   q: Option<DensePolynomial<E::ScalarField>>,
   chis_b: Option<Vec<E::ScalarField>>,
@@ -20,33 +21,53 @@ pub struct Polynomial<E: Pairing> {
 
 impl<E: Pairing> Polynomial<E> {
   // Given the evaluations over the boolean hypercube of a polynomial p of size
-  // 2*m compute the sqrt-sized polynomials p_i as
+  // n compute the sqrt-sized polynomials p_i as
   // p_i(X) = \sum_{j \in \{0,1\}^m} p(j, i) * chi_j(X)
   // where p(X,Y) = \sum_{i \in \{0,\1}^m}
   //  (\sum_{j \in \{0, 1\}^{m}} p(j, i) * \chi_j(X)) * \chi_i(Y)
-  // TODO: add case when the length of the list is not an even power of 2
+  // and m is n/2.
+  // To handle the case in which m is odd, the number of variables in the
+  // sqrt-sized polynomials will be increased by a factor of 2 (i.e. 2^{m+1})
+  // while the number of polynomials remains the same (i.e. 2^m)
   pub fn from_evaluations(Z: &[E::ScalarField]) -> Self {
     let pl_timer = Timer::new("poly_list_build");
     // check the evaluation list is a power of 2
     debug_assert!(Z.len() & (Z.len() - 1) == 0);
-    let m = Z.len().log_2() / 2;
-    let pow_m = 2_usize.pow(m as u32);
-    let polys: Vec<DensePolynomial<E::ScalarField>> = (0..pow_m)
+
+    let num_vars = Z.len().log_2();
+    let m_col = num_vars / 2;
+    let m_row = if num_vars % 2 == 0 {
+      num_vars / 2
+    } else {
+      num_vars / 2 + 1
+    };
+
+    let pow_m_col = 2_usize.pow(m_col as u32);
+    let pow_m_row = 2_usize.pow(m_row as u32);
+
+    let polys: Vec<DensePolynomial<E::ScalarField>> = (0..pow_m_col)
       .into_par_iter()
       .map(|i| {
-        let z: Vec<E::ScalarField> = (0..pow_m)
+        let z: Vec<E::ScalarField> = (0..pow_m_row)
           .into_par_iter()
           // viewing the list of evaluation as a square matrix
           // we select by row j and column i
-          .map(|j| Z[(j << m) | i])
+          // to handle the odd case, we add another row to the matrix i.e.
+          // we add an extra variable to the polynomials while keeping their
+          // number tje same
+          .map(|j| Z[(j << m_col) | i])
           .collect();
         DensePolynomial::new(z)
       })
       .collect();
-    debug_assert!(polys.len() == pow_m);
+
+    debug_assert!(polys.len() == pow_m_col);
+    debug_assert!(polys[0].len == pow_m_row);
+
     pl_timer.stop();
     Self {
-      m,
+      m: m_col,
+      odd: if num_vars % 2 == 1 { 1 } else { 0 },
       polys,
       q: None,
       chis_b: None,
@@ -56,12 +77,12 @@ impl<E: Pairing> Polynomial<E> {
   // Given point = (\vec{a}, \vec{b}), compute the polynomial q as
   // q(Y) =
   // \sum_{j \in \{0,1\}^m}(\sum_{i \in \{0,1\}^m} p(j,i) * chi_i(b)) * chi_j(Y)
-  // and p(a,b) = q(b) where p is the initial polynomial
+  // and p(a,b) = q(a) where p is the initial polynomial
   fn get_q(&mut self, point: &[E::ScalarField]) {
     let q_timer = Timer::new("build_q");
-    debug_assert!(point.len() == 2 * self.m);
-    let _a = &point[0..self.m];
-    let b = &point[self.m..2 * self.m];
+
+    debug_assert!(point.len() == 2 * self.m + self.odd);
+    let b = &point[self.m + self.odd..];
     let pow_m = 2_usize.pow(self.m as u32);
 
     let chis: Vec<E::ScalarField> = (0..pow_m)
@@ -69,7 +90,7 @@ impl<E: Pairing> Polynomial<E> {
       .map(|i| Self::get_chi_i(b, i))
       .collect();
 
-    let z_q: Vec<E::ScalarField> = (0..pow_m)
+    let z_q: Vec<E::ScalarField> = (0..(pow_m * 2_usize.pow(self.odd as u32)))
       .into_par_iter()
       .map(|j| (0..pow_m).map(|i| self.polys[i].Z[j] * chis[i]).sum())
       .collect();
@@ -80,10 +101,9 @@ impl<E: Pairing> Polynomial<E> {
   }
 
   // Given point = (\vec{a}, \vec{b}) used to construct q
-  // compute q(b) = p(a,b).
+  // compute q(a) = p(a,b).
   pub fn eval(&mut self, point: &[E::ScalarField]) -> E::ScalarField {
-    let a = &point[0..point.len() / 2];
-    let _b = &point[point.len() / 2..point.len()];
+    let a = &point[0..point.len() / 2 + self.odd];
     if self.q.is_none() {
       self.get_q(point);
     }
@@ -96,9 +116,7 @@ impl<E: Pairing> Polynomial<E> {
 
   pub fn commit(&self, ck: &CommitterKey<E>) -> (Vec<Commitment<E>>, E::TargetField) {
     let timer_commit = Timer::new("sqrt_commit");
-
     let timer_list = Timer::new("comm_list");
-
     // commit to each of the sqrt sized p_i
     let comm_list: Vec<Commitment<E>> = self
       .polys
@@ -107,7 +125,7 @@ impl<E: Pairing> Polynomial<E> {
       .collect();
     timer_list.stop();
 
-    let h_vec = ck.powers_of_h[0].clone();
+    let h_vec = ck.powers_of_h[self.odd].clone();
     assert!(comm_list.len() == h_vec.len());
 
     let ipp_timer = Timer::new("ipp");
@@ -155,8 +173,7 @@ impl<E: Pairing> Polynomial<E> {
     point: &[E::ScalarField],
     t: &E::TargetField,
   ) -> (Commitment<E>, Proof<E>, MippProof<E>) {
-    let m = point.len() / 2;
-    let a = &point[0..m];
+    let a = &point[0..self.m + self.odd];
     if self.q.is_none() {
       self.get_q(point);
     }
@@ -168,7 +185,6 @@ impl<E: Pairing> Polynomial<E> {
     // Compute the PST commitment to q obtained as the inner products of the
     // commitments to the polynomials p_i and chi_i(\vec{b}) for i ranging over
     // the boolean hypercube of size m.
-    let _m = a.len();
     let timer_msm = Timer::new("msm");
     if self.chis_b.is_none() {
       panic!("chis(b) should have been computed for q");
@@ -188,7 +204,7 @@ impl<E: Pairing> Polynomial<E> {
     };
     let comm = MultilinearPC::<E>::commit(ck, &q);
     debug_assert!(c_u == comm.g_product);
-    let h_vec = ck.powers_of_h[0].clone();
+    let h_vec = ck.powers_of_h[self.odd].clone();
 
     // construct MIPP proof that U is the inner product of the vector A
     // and the vector y, where A is the opening vector to T
@@ -224,8 +240,9 @@ impl<E: Pairing> Polynomial<E> {
     T: &E::TargetField,
   ) -> bool {
     let len = point.len();
-    let a = &point[0..len / 2];
-    let b = &point[len / 2..len];
+    let odd = if len % 2 == 1 { 1 } else { 0 };
+    let a = &point[0..len / 2 + odd];
+    let b = &point[len / 2 + odd..len];
 
     let timer_mipp_verify = Timer::new("mipp_verify");
     // verify that U = A^y where A is the opening vector of T
@@ -260,7 +277,7 @@ mod tests {
   #[test]
   fn check_sqrt_poly_eval() {
     let mut rng = ark_std::test_rng();
-    let num_vars = 8;
+    let num_vars = 6;
     let len = 2_usize.pow(num_vars);
     let Z: Vec<F> = (0..len).into_iter().map(|_| F::rand(&mut rng)).collect();
     let r: Vec<F> = (0..num_vars)
@@ -278,9 +295,16 @@ mod tests {
   }
 
   #[test]
-  fn check_new_poly_commit() {
+  fn check_commit() {
+    // check odd case
+    check_sqrt_poly_commit(5);
+
+    // check even case
+    check_sqrt_poly_commit(6);
+  }
+
+  fn check_sqrt_poly_commit(num_vars: u32) {
     let mut rng = ark_std::test_rng();
-    let num_vars = 4;
     let len = 2_usize.pow(num_vars);
     let Z: Vec<F> = (0..len).into_iter().map(|_| F::rand(&mut rng)).collect();
     let r: Vec<F> = (0..num_vars)
@@ -288,8 +312,8 @@ mod tests {
       .map(|_| F::rand(&mut rng))
       .collect();
 
-    let gens = MultilinearPC::<E>::setup(2, &mut rng);
-    let (ck, vk) = MultilinearPC::<E>::trim(&gens, 2);
+    let gens = MultilinearPC::<E>::setup(3, &mut rng);
+    let (ck, vk) = MultilinearPC::<E>::trim(&gens, 3);
 
     let mut pl = Polynomial::from_evaluations(&Z.clone());
 

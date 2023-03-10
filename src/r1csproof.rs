@@ -58,7 +58,6 @@ pub struct R1CSVerifierProof<E: Pairing> {
   initial_state: E::ScalarField,
   transcript_sat_state: E::ScalarField,
   eval_vars_at_ry: E::ScalarField,
-  ry: Vec<E::ScalarField>,
   proof_eval_vars_at_ry: Proof<E>,
   t: E::TargetField,
   mipp_proof: MippProof<E>,
@@ -138,6 +137,9 @@ where
       sc_phase2: SumcheckVerificationCircuit {
         polys: uni_polys_round2,
       },
+      claimed_rx: (0..num_cons.log_2())
+        .map(|_i| E::ScalarField::rand(&mut rng))
+        .collect_vec(),
       claimed_ry: (0..num_vars.log_2() + 1)
         .map(|_i| E::ScalarField::rand(&mut rng))
         .collect_vec(),
@@ -407,6 +409,7 @@ where
       eval_vars_at_ry: self.eval_vars_at_ry,
       input_as_sparse_poly,
       comm: self.comm.clone(),
+      rx: self.rx.clone(),
       ry: self.ry.clone(),
       transcript_sat_state: self.transcript_sat_state,
     };
@@ -423,7 +426,6 @@ where
       initial_state: self.initial_state,
       transcript_sat_state: self.transcript_sat_state,
       eval_vars_at_ry: self.eval_vars_at_ry,
-      ry: self.ry.clone(),
       proof_eval_vars_at_ry: self.proof_eval_vars_at_ry.clone(),
       t: self.t,
       mipp_proof: self.mipp_proof.clone(),
@@ -439,15 +441,18 @@ where
   // commitment opening.
   pub fn verify(
     &self,
+    r: (Vec<E::ScalarField>, Vec<E::ScalarField>),
     input: &[E::ScalarField],
     evals: &(E::ScalarField, E::ScalarField, E::ScalarField),
     transcript: &mut PoseidonTranscript<E::ScalarField>,
     gens: &R1CSGens<E>,
   ) -> Result<bool, ProofVerifyError> {
+    let (rx, ry) = &r;
     let (Ar, Br, Cr) = evals;
     let mut pubs = vec![self.initial_state];
     pubs.extend(input.clone());
-    pubs.extend(self.ry.clone());
+    pubs.extend(rx.clone());
+    pubs.extend(ry.clone());
     pubs.extend(vec![
       self.eval_vars_at_ry,
       *Ar,
@@ -466,7 +471,7 @@ where
         transcript,
         &gens.gens_pc.vk,
         &self.comm,
-        &self.ry[1..],
+        &ry[1..],
         self.eval_vars_at_ry,
         &self.proof_eval_vars_at_ry,
         &self.mipp_proof,
@@ -616,7 +621,13 @@ mod tests {
 
     let mut verifier_transcript = PoseidonTranscript::new(&params.clone());
     assert!(verifer_proof
-      .verify(&input, &inst_evals, &mut verifier_transcript, &gens)
+      .verify(
+        (rx, ry),
+        &input,
+        &inst_evals,
+        &mut verifier_transcript,
+        &gens
+      )
       .is_ok());
   }
 }

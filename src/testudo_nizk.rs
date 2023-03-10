@@ -146,6 +146,7 @@ where
     let inst_evals = inst.inst.evaluate(claimed_rx, claimed_ry);
 
     let sat_verified = self.r1cs_verifier_proof.verify(
+      (claimed_rx.clone(), claimed_ry.clone()),
       &input.assignment,
       &inst_evals,
       transcript,

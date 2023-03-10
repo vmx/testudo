@@ -229,6 +229,7 @@ pub struct R1CSVerificationCircuit<F: PrimeField> {
   pub sc_phase1: SumcheckVerificationCircuit<F>,
   pub sc_phase2: SumcheckVerificationCircuit<F>,
   // The point on which the polynomial was evaluated by the prover.
+  pub claimed_rx: Vec<F>,
   pub claimed_ry: Vec<F>,
   pub claimed_transcript_sat_state: F,
 }
@@ -251,6 +252,7 @@ impl<F: PrimeField> R1CSVerificationCircuit<F> {
       sc_phase2: SumcheckVerificationCircuit {
         polys: config.polys_sc2.clone(),
       },
+      claimed_rx: config.rx.clone(),
       claimed_ry: config.ry.clone(),
       claimed_transcript_sat_state: config.transcript_sat_state,
     }
@@ -284,6 +286,12 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
       .map(|i| FpVar::<F>::new_variable(cs.clone(), || Ok(i), AllocationMode::Input).unwrap())
       .collect::<Vec<FpVar<F>>>();
 
+    let claimed_rx_vars = self
+      .claimed_rx
+      .iter()
+      .map(|r| FpVar::<F>::new_variable(cs.clone(), || Ok(r), AllocationMode::Input).unwrap())
+      .collect::<Vec<FpVar<F>>>();
+
     let claimed_ry_vars = self
       .claimed_ry
       .iter()
@@ -303,6 +311,13 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
       self
         .sc_phase1
         .verifiy_sumcheck(&poly_sc1_vars, &claim_phase1_var, &mut transcript_var)?;
+
+    // The prover sends (rx, ry) to the verifier for the evaluation proof so
+    // the constraints need to ensure it is indeed the result from the first
+    // round of sumcheck verification.
+    for (i, r) in claimed_rx_vars.iter().enumerate() {
+      rx_var[i].enforce_equal(r)?;
+    }
 
     let (Az_claim, Bz_claim, Cz_claim, prod_Az_Bz_claims) = &self.claims_phase2;
 
@@ -344,6 +359,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
     //  claimed point, coming from the prover, is actually the point derived
     //  inside the circuit. These additional checks will be removed
     //  when the commitment verification is done inside the circuit.
+    //  Moreover, (rx, ry) will be used in the evaluation proof.
     for (i, r) in claimed_ry_vars.iter().enumerate() {
       ry_var[i].enforce_equal(r)?;
     }
@@ -401,6 +417,7 @@ pub struct VerifierConfig<E: Pairing> {
   pub eval_vars_at_ry: E::ScalarField,
   pub polys_sc1: Vec<UniPoly<E::ScalarField>>,
   pub polys_sc2: Vec<UniPoly<E::ScalarField>>,
+  pub rx: Vec<E::ScalarField>,
   pub ry: Vec<E::ScalarField>,
   pub transcript_sat_state: E::ScalarField,
 }
