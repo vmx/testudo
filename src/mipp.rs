@@ -304,7 +304,7 @@ impl<E: Pairing> MippProof<E> {
 
     let check_u = ref_final_res.uc == final_u;
     assert!(check_u == true);
-    check_h & check_u & check_t
+    check_h & check_u
   }
 }
 

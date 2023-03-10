@@ -52,7 +52,7 @@ where
   E::ScalarField: Absorb,
 {
   let mut writer = csv::Writer::from_path(file_name).expect("unable to open csv writer");
-  for &s in [4, 10, 12, 14, 16, 18, 20, 22, 24, 26].iter() {
+  for &s in [4, 5, 10, 12, 14, 16, 18, 20, 22, 24, 26].iter() {
     println!("Running for {} inputs", s);
     let mut br = BenchmarkResults::default();
     let num_vars = (2_usize).pow(s as u32);
