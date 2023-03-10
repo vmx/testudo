@@ -21,11 +21,14 @@ pub struct Polynomial<E: Pairing> {
 
 impl<E: Pairing> Polynomial<E> {
   // Given the evaluations over the boolean hypercube of a polynomial p of size
-  // 2*m compute the sqrt-sized polynomials p_i as
+  // n compute the sqrt-sized polynomials p_i as
   // p_i(X) = \sum_{j \in \{0,1\}^m} p(j, i) * chi_j(X)
   // where p(X,Y) = \sum_{i \in \{0,\1}^m}
   //  (\sum_{j \in \{0, 1\}^{m}} p(j, i) * \chi_j(X)) * \chi_i(Y)
-  // TODO: add case when the length of the list is not an even power of 2
+  // and m is n/2.
+  // To handle the case in which m is odd, the number of variables in the
+  // sqrt-sized polynomials will be increased by a factor of 2 (i.e. 2^{m+1})
+  // while the number of polynomials remains the same (i.e. 2^m)
   pub fn from_evaluations(Z: &[E::ScalarField]) -> Self {
     let pl_timer = Timer::new("poly_list_build");
     // check the evaluation list is a power of 2
@@ -34,9 +37,9 @@ impl<E: Pairing> Polynomial<E> {
     let num_vars = Z.len().log_2();
     let m_col = num_vars / 2;
     let m_row = if num_vars % 2 == 0 {
-      Z.len().log_2() / 2
+      num_vars / 2
     } else {
-      Z.len().log_2() / 2 + 1
+      num_vars / 2 + 1
     };
 
     let pow_m_col = 2_usize.pow(m_col as u32);

@@ -126,7 +126,7 @@ where
 
   // Verifies the satisfiability proof for the R1CS instance. In NIZK mode, the
   // verifier evaluates matrices A, B and C themselves, which is a linear
-  // operation and hence this is not a SNARK. 
+  // operation and hence this is not a SNARK.
   // However, for highly structured circuits this operation is fast.
   pub fn verify(
     &self,
@@ -141,6 +141,7 @@ where
     let inst_evals = inst.inst.evaluate(claimed_rx, claimed_ry);
 
     let sat_verified = self.r1cs_verifier_proof.verify(
+      (claimed_rx.clone(), claimed_ry.clone()),
       &input.assignment,
       &inst_evals,
       transcript,

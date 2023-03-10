@@ -202,8 +202,11 @@ where
     transcript: &mut PoseidonTranscript<E::ScalarField>,
     _poseidon: PoseidonConfig<E::ScalarField>,
   ) -> Result<bool, ProofVerifyError> {
+    let (rx, ry) = &self.r;
+
     let timer_sat_verification = Timer::new("r1cs_sat_verification");
     let sat_verified = self.r1cs_verifier_proof.verify(
+      (rx.clone(), ry.clone()),
       &input.assignment,
       &self.inst_evals,
       transcript,
@@ -217,7 +220,6 @@ where
     transcript.append_scalar(b"", Br);
     transcript.append_scalar(b"", Cr);
 
-    let (rx, ry) = &self.r;
     let timer_eval_verification = Timer::new("r1cs_eval_verification");
     let eval_verified = self.r1cs_eval_proof.verify(
       &comm.comm,

@@ -188,6 +188,8 @@ impl<E: Pairing> PolyCommitmentGens<E> {
     let odd = if num_vars % 2 == 1 { 1 } else { 0 };
     // Generates the SRS and trims it based on the number of variables in the
     // multilinear polynomial.
+    // If num_vars is odd, a crs of size num_vars/2 + 1 will be needed for the
+    // polynomial commitment.
     let mut rng = ark_std::test_rng();
     let pst_gens = MultilinearPC::<E>::setup(num_vars / 2 + odd, &mut rng);
     let (ck, vk) = MultilinearPC::<E>::trim(&pst_gens, num_vars / 2 + odd);
