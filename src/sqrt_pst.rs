@@ -26,7 +26,7 @@ impl<E: Pairing> Polynomial<E> {
   // where p(X,Y) = \sum_{i \in \{0,\1}^m}
   //  (\sum_{j \in \{0, 1\}^{m}} p(j, i) * \chi_j(X)) * \chi_i(Y)
   // and m is n/2.
-  // To handle the case in which m is odd, the number of variables in the
+  // To handle the case in which n is odd, the number of variables in the
   // sqrt-sized polynomials will be increased by a factor of 2 (i.e. 2^{m+1})
   // while the number of polynomials remains the same (i.e. 2^m)
   pub fn from_evaluations(Z: &[E::ScalarField]) -> Self {
