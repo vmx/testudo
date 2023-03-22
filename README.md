@@ -18,7 +18,7 @@ Run `cargo build` or `cargo test` to build, respectively test the repository.
 
 To run the current benchmarks on BLS12-377:
 
-```
+```console
 cargo bench --bench testudo --all-features release -- --nocapture
 ```
 
