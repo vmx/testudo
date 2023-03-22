@@ -28,7 +28,7 @@ mod product_tree;
 mod r1csinstance;
 mod r1csproof;
 mod sparse_mlpoly;
-mod sqrt_pst;
+pub mod sqrt_pst;
 mod sumcheck;
 pub mod testudo_nizk;
 pub mod testudo_snark;

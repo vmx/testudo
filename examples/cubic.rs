@@ -11,8 +11,8 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{BigInteger, PrimeField};
 use ark_std::{One, UniformRand, Zero};
-use libspartan::testudo_snark::{TestudoSnark, TestudoSnarkGens};
-use libspartan::{
+use libtestudo::testudo_snark::{TestudoSnark, TestudoSnarkGens};
+use libtestudo::{
   parameters::poseidon_params, poseidon_transcript::PoseidonTranscript, InputsAssignment, Instance,
   VarsAssignment,
 };

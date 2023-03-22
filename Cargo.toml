@@ -52,7 +52,7 @@ csv = "1.1.5"
 criterion = "0.3.6"
 
 [lib]
-name = "libspartan"
+name = "libtestudo"
 path = "src/lib.rs"
 
 [[bin]]
@@ -61,6 +61,10 @@ path = "profiler/testudo.rs"
 
 [[bench]]
 name = "testudo"
+harness = false
+
+[[bench]]
+name = "pst"
 harness = false
 
 [features]
@@ -75,6 +79,7 @@ std = ["ark-ff/std", "ark-ec/std", "ark-std/std", "ark-relations/std", "ark-seri
 ark-poly-commit = {git = "https://github.com/cryptonetlab/ark-polycommit", branch="feat/variable-crs"}
 ark-groth16 = { git = "https://github.com/arkworks-rs/groth16" }
 blstrs = { git = "https://github.com/nikkolasg/blstrs", branch = "feat/arkwork" }
-ark-ec = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
-ark-ff = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
-ark-serialize = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
+ark-ec = { git = "https://github.com/vmx/algebra", branch="affine-repr-xy-owned" }
+ark-ff = { git = "https://github.com/vmx/algebra", branch="affine-repr-xy-owned" }
+ark-poly = { git = "https://github.com/vmx/algebra", branch="affine-repr-xy-owned" }
+ark-serialize = { git = "https://github.com/vmx/algebra", branch="affine-repr-xy-owned" }

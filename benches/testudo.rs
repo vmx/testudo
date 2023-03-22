@@ -5,8 +5,8 @@ use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_serialize::*;
-use libspartan::parameters::PoseidonConfiguration;
-use libspartan::{
+use libtestudo::parameters::PoseidonConfiguration;
+use libtestudo::{
   poseidon_transcript::PoseidonTranscript,
   testudo_snark::{TestudoSnark, TestudoSnarkGens},
   Instance,
