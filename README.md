@@ -1,5 +1,7 @@
 # Testudo
 
+[![Build and Test Testudo](https://github.com/cryptonetlab/testudo/actions/workflows/testudo.yml/badge.svg?branch=master)](https://github.com/cryptonetlab/testudo/actions/workflows/testudo.yml)
+
 Testudo is a linear-time prover SNARK with a small and universal trusted setup. For a deep dive, please refer to [this](https://www.notion.so/pl-strflt/Testudo-Blog-Post-Final-a18db71f8e634ebbb9f68383f7904c51) blog post.
 
 In the current stage, the repository contains:

@@ -52,7 +52,7 @@ csv = "1.1.5"
 criterion = "0.3.6"
 
 [lib]
-name = "libspartan"
+name = "libtestudo"
 path = "src/lib.rs"
 
 [[bin]]
@@ -61,6 +61,10 @@ path = "profiler/testudo.rs"
 
 [[bench]]
 name = "testudo"
+harness = false
+
+[[bench]]
+name = "pst"
 harness = false
 
 [features]

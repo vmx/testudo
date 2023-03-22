@@ -1,16 +1,16 @@
 #![allow(non_snake_case)]
 #![allow(clippy::assertions_on_result_states)]
 
-extern crate libspartan;
+extern crate libtestudo;
 extern crate merlin;
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_serialize::*;
-use libspartan::parameters::PoseidonConfiguration;
-use libspartan::poseidon_transcript::PoseidonTranscript;
-use libspartan::{
+use libtestudo::parameters::PoseidonConfiguration;
+use libtestudo::poseidon_transcript::PoseidonTranscript;
+use libtestudo::{
   testudo_snark::{TestudoSnark, TestudoSnarkGens},
   Instance,
 };
