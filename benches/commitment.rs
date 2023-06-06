@@ -34,7 +34,7 @@ where
 {
   let params = E::ScalarField::poseidon_params();
   let mut writer = csv::Writer::from_path(fname).expect("unable to open csv writer");
-  for &s in [4, 5, 15, 20, 15, 27].iter() {
+  for &s in [4, 5, 15, 20, 25].iter() {
     println!("Running for {} inputs", s);
     let mut rng = ark_std::test_rng();
     let mut br = BenchmarkResults::default();
