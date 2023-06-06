@@ -135,5 +135,9 @@ fn bench_pst<E: Pairing>(num_vars: usize, res: &mut BenchmarkResults) {
   let check = MultilinearPC::check(&vkey, &comm, &xs, y, &proof);
   res.pst_verification = start.elapsed().as_millis();
 
+  let mut b = Vec::new();
+  proof.serialize_compressed(&mut b).unwrap();
+  res.pst_proof_size = b.len() as u128;
+
   assert!(check);
 }

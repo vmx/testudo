@@ -46,11 +46,9 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for GrothCircuit<F> {
     cs: ark_relations::r1cs::ConstraintSystemRef<F>,
   ) -> ark_relations::r1cs::Result<()> {
     let a = F::rand(&mut rand::thread_rng());
-    let b = F::rand(&mut rand::thread_rng());
-    let av = FpVar::new_witness(cs.clone(), || Ok(a))?;
-    let bv = FpVar::new_witness(cs.clone(), || Ok(b))?;
+    let mut av = FpVar::new_witness(cs.clone(), || Ok(a))?;
     for _ in 0..self.n_constraints {
-      av.clone().mul(bv.clone());
+      let av = av.clone().mul(av.clone());
     }
     Ok(())
   }
