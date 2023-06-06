@@ -90,7 +90,7 @@ where
   E::ScalarField: Absorb,
 {
   let mut writer = csv::Writer::from_path(file_name).expect("unable to open csv writer");
-  for &s in [5, 10, 15, 20, 24, 26].iter() {
+  for &s in [5, 10, 15, 20, 24].iter() {
     //for &s in [4].iter() {
     println!("Running for {} constraints", s);
     let mut br = BenchmarkResults::default();
