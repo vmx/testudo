@@ -22,9 +22,9 @@ use serde::Serialize;
 use std::ops::Mul;
 
 fn main() {
-  bench_with_bls12_377();
+  // bench_with_bls12_377();
   // bench_with_bls12_381();
-  // bench_with_ark_blst();
+  bench_with_ark_blst();
 }
 struct GrothCircuit<F: PrimeField> {
   n_constraints: usize,
@@ -70,20 +70,20 @@ struct BenchmarkResults {
 
 fn bench_with_ark_blst() {
   let params = ark_blst::Scalar::poseidon_params();
-  testudo_snark_bench::<ark_blst::Bls12>(params, "testudo_blst");
+  testudo_snark_bench::<ark_blst::Bls12>(params, "testudo_blst", false);
 }
 
 fn bench_with_bls12_377() {
   let params = ark_bls12_377::Fr::poseidon_params();
-  testudo_snark_bench::<ark_bls12_377::Bls12_377>(params, "testudo_bls12_377");
+  testudo_snark_bench::<ark_bls12_377::Bls12_377>(params, "testudo_bls12_377", true);
 }
 
 fn bench_with_bls12_381() {
   let params = ark_bls12_381::Fr::poseidon_params();
-  testudo_snark_bench::<ark_bls12_381::Bls12_381>(params, "testudo_bls12_381");
+  testudo_snark_bench::<ark_bls12_381::Bls12_381>(params, "testudo_bls12_381", true);
 }
 
-fn testudo_snark_bench<E>(params: PoseidonConfig<E::ScalarField>, file_name: &str)
+fn testudo_snark_bench<E>(params: PoseidonConfig<E::ScalarField>, file_name: &str, verify: bool)
 where
   E: Pairing,
   E::ScalarField: PrimeField,
@@ -147,16 +147,18 @@ where
     let mut verifier_transcript = PoseidonTranscript::new(&params.clone());
     let start = Instant::now();
 
-    let res = proof.verify(
-      &gens,
-      &comm,
-      &inputs,
-      &mut verifier_transcript,
-      params.clone(),
-    );
-    assert!(res.is_ok());
-    let duration = start.elapsed().as_millis();
-    br.testudo_verification_time = duration;
+    if verify {
+      let res = proof.verify(
+        &gens,
+        &comm,
+        &inputs,
+        &mut verifier_transcript,
+        params.clone(),
+      );
+      assert!(res.is_ok());
+      let duration = start.elapsed().as_millis();
+      br.testudo_verification_time = duration;
+    }
 
     groth16_bench::<E>(num_cons, &mut br);
     writer
