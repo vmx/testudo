@@ -64,7 +64,7 @@ name = "testudo"
 harness = false
 
 [[bench]]
-name = "pst"
+name = "commitment"
 harness = false
 
 [features]
