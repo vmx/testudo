@@ -25,6 +25,7 @@ struct BenchmarkResults {
 }
 fn main() {
   testudo_commitment_benchmark::<Bls12_377>("testudo_commitment_bls12377.csv");
+  testudo_commitment_benchmark::<ark_blst::Bls12>("testudo_commitment_bls12381.csv");
 }
 
 fn testudo_commitment_benchmark<E: Pairing>(fname: &str)
